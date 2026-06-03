@@ -31,47 +31,47 @@ model Word {
   id            String         @id @default(uuid())
   word          String
   phonetic      String?
-  meaning       String           @db.Text
-  meaningCn     String           @db.Text
-  example       String?          @db.Text
+  meaning       String
+  meaningCn     String
+  example       String?
   wordListId    String
-  wordList      WordList       @relation(fields: [wordListId], references: [id])
   gameQuestions GameQuestion[]
+  wordList      WordList       @relation(fields: [wordListId], references: [id])
 }
 
 model Game {
-  id         String   @id @default(uuid())
+  id         String         @id @default(uuid())
   mode       String
-  status     String   @default("waiting")
+  status     String         @default("waiting")
   wordLevel  String
   player1Id  String
   player2Id  String?
   winnerId   String?
-  score1     Int      @default(0)
-  score2     Int      @default(0)
-  totalQ     Int      @default(10)
-  createdAt  DateTime @default(now())
+  score1     Int            @default(0)
+  score2     Int            @default(0)
+  totalQ     Int            @default(10)
+  createdAt  DateTime       @default(now())
   finishedAt DateTime?
-  player1    User     @relation("Player1", fields: [player1Id], references: [id])
-  player2    User?    @relation("Player2", fields: [player2Id], references: [id])
-  winner     User?    @relation("Winner", fields: [winnerId], references: [id])
+  player1    User           @relation("Player1", fields: [player1Id], references: [id])
+  player2    User?          @relation("Player2", fields: [player2Id], references: [id])
+  winner     User?          @relation("Winner", fields: [winnerId], references: [id])
   questions  GameQuestion[]
 }
 
 model GameQuestion {
-  id        String  @id @default(uuid())
-  gameId    String
-  wordId    String
-  type      String
-  options   String  @db.Text
-  answer1   String?
-  answer2   String?
-  correct1  Boolean @default(false)
-  correct2  Boolean @default(false)
-  time1     Int?
-  time2     Int?
-  game      Game    @relation(fields: [gameId], references: [id], onDelete: Cascade)
-  word      Word    @relation(fields: [wordId], references: [id])
+  id       String  @id @default(uuid())
+  gameId   String
+  wordId   String
+  type     String
+  options  String
+  answer1  String?
+  answer2  String?
+  correct1 Boolean @default(false)
+  correct2 Boolean @default(false)
+  time1    Int?
+  time2    Int?
+  game     Game    @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  word     Word    @relation(fields: [wordId], references: [id])
 }
 
 model Score {
