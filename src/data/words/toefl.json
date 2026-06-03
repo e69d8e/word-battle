@@ -1,0 +1,975 @@
+[
+  {
+    "word": "aberration",
+    "phonetic": "/ˌæbəˈreɪʃn/",
+    "meaning": "a departure from what is normal or expected",
+    "meaningCn": "异常；偏差",
+    "example": "The warm weather in January was an aberration."
+  },
+  {
+    "word": "abstract",
+    "phonetic": "/ˈæbstrækt/",
+    "meaning": "existing in thought or as an idea but not having physical existence",
+    "meaningCn": "抽象的；摘要",
+    "example": "The professor gave an abstract explanation of the theory."
+  },
+  {
+    "word": "abundant",
+    "phonetic": "/əˈbʌndənt/",
+    "meaning": "existing in large quantities; more than enough",
+    "meaningCn": "丰富的；充裕的",
+    "example": "The region has abundant natural resources."
+  },
+  {
+    "word": "accommodate",
+    "phonetic": "/əˈkɒmədeɪt/",
+    "meaning": "to provide lodging or room for someone",
+    "meaningCn": "容纳；提供住宿",
+    "example": "The hotel can accommodate up to 500 guests."
+  },
+  {
+    "word": "accumulate",
+    "phonetic": "/əˈkjuːmjəleɪt/",
+    "meaning": "to gather together over time",
+    "meaningCn": "积累；积聚",
+    "example": "Dust had accumulated on the shelves."
+  },
+  {
+    "word": "acquire",
+    "phonetic": "/əˈkwaɪər/",
+    "meaning": "to buy or obtain something for oneself",
+    "meaningCn": "获得；取得",
+    "example": "She acquired a new skill through practice."
+  },
+  {
+    "word": "adapt",
+    "phonetic": "/əˈdæpt/",
+    "meaning": "to adjust to new conditions",
+    "meaningCn": "适应；改编",
+    "example": "Animals must adapt to changing environments to survive."
+  },
+  {
+    "word": "adequate",
+    "phonetic": "/ˈædɪkwət/",
+    "meaning": "sufficient for a specific requirement",
+    "meaningCn": "充足的；适当的",
+    "example": "The food was adequate for the journey."
+  },
+  {
+    "word": "adverse",
+    "phonetic": "/ˈædvɜːrs/",
+    "meaning": "preventing success or development; harmful",
+    "meaningCn": "不利的；有害的",
+    "example": "Adverse weather conditions delayed the flight."
+  },
+  {
+    "word": "advocate",
+    "phonetic": "/ˈædvəkeɪt/",
+    "meaning": "to publicly recommend or support",
+    "meaningCn": "提倡；拥护者",
+    "example": "She advocates for equal rights for all citizens."
+  },
+  {
+    "word": "aesthetic",
+    "phonetic": "/iːsˈθetɪk/",
+    "meaning": "concerned with beauty or the appreciation of beauty",
+    "meaningCn": "审美的；美学的",
+    "example": "The building has great aesthetic appeal."
+  },
+  {
+    "word": "aggregate",
+    "phonetic": "/ˈæɡrɪɡət/",
+    "meaning": "a whole formed by combining several elements",
+    "meaningCn": "总计；集合体",
+    "example": "The aggregate score of the two games was 5-3."
+  },
+  {
+    "word": "allocate",
+    "phonetic": "/ˈæləkeɪt/",
+    "meaning": "to distribute resources for a particular purpose",
+    "meaningCn": "分配；拨出",
+    "example": "The government allocated funds for education."
+  },
+  {
+    "word": "alter",
+    "phonetic": "/ˈɔːltər/",
+    "meaning": "to change or modify something",
+    "meaningCn": "改变；修改",
+    "example": "They had to alter the plan due to bad weather."
+  },
+  {
+    "word": "ambiguous",
+    "phonetic": "/æmˈbɪɡjuəs/",
+    "meaning": "open to more than one interpretation",
+    "meaningCn": "模棱两可的；含糊的",
+    "example": "The instructions were ambiguous and confusing."
+  },
+  {
+    "word": "amend",
+    "phonetic": "/əˈmend/",
+    "meaning": "to make minor changes to improve a text or law",
+    "meaningCn": "修改；修正",
+    "example": "The committee voted to amend the constitution."
+  },
+  {
+    "word": "analogy",
+    "phonetic": "/əˈnælədʒi/",
+    "meaning": "a comparison between things that have similar features",
+    "meaningCn": "类比；类推",
+    "example": "He drew an analogy between the brain and a computer."
+  },
+  {
+    "word": "anticipate",
+    "phonetic": "/ænˈtɪsɪpeɪt/",
+    "meaning": "to expect or predict something",
+    "meaningCn": "预期；期望",
+    "example": "We anticipate an increase in sales next quarter."
+  },
+  {
+    "word": "appreciate",
+    "phonetic": "/əˈpriːʃieɪt/",
+    "meaning": "to recognize the value of something",
+    "meaningCn": "感激；欣赏",
+    "example": "I really appreciate your help with this project."
+  },
+  {
+    "word": "approach",
+    "phonetic": "/əˈprəʊtʃ/",
+    "meaning": "to come near or a way of dealing with something",
+    "meaningCn": "接近；方法",
+    "example": "We need a new approach to solve this problem."
+  },
+  {
+    "word": "appropriate",
+    "phonetic": "/əˈprəʊpriət/",
+    "meaning": "suitable or proper for the circumstances",
+    "meaningCn": "适当的；恰当的",
+    "example": "Please wear appropriate clothing for the interview."
+  },
+  {
+    "word": "approximate",
+    "phonetic": "/əˈprɒksɪmət/",
+    "meaning": "close to the actual but not completely accurate",
+    "meaningCn": "大约的；近似的",
+    "example": "The approximate cost of the project is $50,000."
+  },
+  {
+    "word": "arbitrary",
+    "phonetic": "/ˈɑːrbɪtreri/",
+    "meaning": "based on random choice rather than reason",
+    "meaningCn": "任意的；武断的",
+    "example": "The decision seemed arbitrary and unfair."
+  },
+  {
+    "word": "assert",
+    "phonetic": "/əˈsɜːrt/",
+    "meaning": "to state a fact or belief confidently",
+    "meaningCn": "断言；声称",
+    "example": "He asserted his innocence throughout the trial."
+  },
+  {
+    "word": "assess",
+    "phonetic": "/əˈses/",
+    "meaning": "to evaluate or estimate the nature of something",
+    "meaningCn": "评估；评定",
+    "example": "The teacher assessed the students' performance."
+  },
+  {
+    "word": "assign",
+    "phonetic": "/əˈsaɪn/",
+    "meaning": "to allocate a job or duty to someone",
+    "meaningCn": "分配；指派",
+    "example": "The teacher assigned homework to the students."
+  },
+  {
+    "word": "assume",
+    "phonetic": "/əˈsjuːm/",
+    "meaning": "to suppose to be the case without proof",
+    "meaningCn": "假设；承担",
+    "example": "I assume you've read the instructions."
+  },
+  {
+    "word": "attribute",
+    "phonetic": "/əˈtrɪbjuːt/",
+    "meaning": "to regard something as being caused by",
+    "meaningCn": "归因于；属性",
+    "example": "She attributed her success to hard work."
+  },
+  {
+    "word": "authority",
+    "phonetic": "/ɔːˈθɒrəti/",
+    "meaning": "the power or right to give orders",
+    "meaningCn": "权威；当局",
+    "example": "The local authority approved the building plan."
+  },
+  {
+    "word": "bias",
+    "phonetic": "/ˈbaɪəs/",
+    "meaning": "prejudice in favor of or against one thing compared with another",
+    "meaningCn": "偏见；偏差",
+    "example": "The study showed no bias toward any particular group."
+  },
+  {
+    "word": "capable",
+    "phonetic": "/ˈkeɪpəbl/",
+    "meaning": "having the ability or quality necessary to do something",
+    "meaningCn": "有能力的；能干的",
+    "example": "She is capable of handling the project alone."
+  },
+  {
+    "word": "capacity",
+    "phonetic": "/kəˈpæsəti/",
+    "meaning": "the maximum amount that something can contain",
+    "meaningCn": "容量；能力",
+    "example": "The stadium has a capacity of 50,000."
+  },
+  {
+    "word": "cease",
+    "phonetic": "/siːs/",
+    "meaning": "to come or bring to an end",
+    "meaningCn": "停止；终止",
+    "example": "The factory ceased production last month."
+  },
+  {
+    "word": "chronic",
+    "phonetic": "/ˈkrɒnɪk/",
+    "meaning": "persisting for a long time or constantly recurring",
+    "meaningCn": "慢性的；长期的",
+    "example": "He suffers from chronic back pain."
+  },
+  {
+    "word": "circumstance",
+    "phonetic": "/ˈsɜːrkəmstæns/",
+    "meaning": "a fact or condition connected with an event or action",
+    "meaningCn": "情况；环境",
+    "example": "Under the circumstances, we had no choice."
+  },
+  {
+    "word": "clarify",
+    "phonetic": "/ˈklærɪfaɪ/",
+    "meaning": "to make a statement or situation less confused",
+    "meaningCn": "澄清；阐明",
+    "example": "Could you clarify what you mean?"
+  },
+  {
+    "word": "coincide",
+    "phonetic": "/ˌkəʊɪnˈsaɪd/",
+    "meaning": "to occur at the same time",
+    "meaningCn": "巧合；一致",
+    "example": "The two events coincided by chance."
+  },
+  {
+    "word": "collaborate",
+    "phonetic": "/kəˈlæbəreɪt/",
+    "meaning": "to work jointly on an activity or project",
+    "meaningCn": "合作；协作",
+    "example": "The two companies collaborated on the research."
+  },
+  {
+    "word": "collapse",
+    "phonetic": "/kəˈlæps/",
+    "meaning": "to fall down or give way suddenly",
+    "meaningCn": "倒塌；崩溃",
+    "example": "The old building collapsed during the earthquake."
+  },
+  {
+    "word": "commission",
+    "phonetic": "/kəˈmɪʃn/",
+    "meaning": "the act of committing or entrusting a task",
+    "meaningCn": "委员会；佣金",
+    "example": "He earned a commission on each sale."
+  },
+  {
+    "word": "commodity",
+    "phonetic": "/kəˈmɒdəti/",
+    "meaning": "a raw material or agricultural product that can be bought and sold",
+    "meaningCn": "商品；日用品",
+    "example": "Oil is a valuable commodity."
+  },
+  {
+    "word": "communicate",
+    "phonetic": "/kəˈmjuːnɪkeɪt/",
+    "meaning": "to share or exchange information",
+    "meaningCn": "交流；传达",
+    "example": "It's important to communicate effectively with your team."
+  },
+  {
+    "word": "community",
+    "phonetic": "/kəˈmjuːnəti/",
+    "meaning": "a group of people living in the same place",
+    "meaningCn": "社区；团体",
+    "example": "The local community organized a charity event."
+  },
+  {
+    "word": "comparable",
+    "phonetic": "/ˈkɒmpərəbl/",
+    "meaning": "able to be likened to another; similar",
+    "meaningCn": "可比较的；类似的",
+    "example": "The quality is comparable to more expensive brands."
+  },
+  {
+    "word": "compel",
+    "phonetic": "/kəmˈpel/",
+    "meaning": "to force someone to do something",
+    "meaningCn": "强迫；迫使",
+    "example": "The law compels employers to provide health insurance."
+  },
+  {
+    "word": "compensate",
+    "phonetic": "/ˈkɒmpenseɪt/",
+    "meaning": "to give something in recognition of loss or suffering",
+    "meaningCn": "补偿；赔偿",
+    "example": "The company compensated the workers for their overtime."
+  },
+  {
+    "word": "compile",
+    "phonetic": "/kəmˈpaɪl/",
+    "meaning": "to produce by assembling information",
+    "meaningCn": "编译；汇编",
+    "example": "She compiled a list of all the participants."
+  },
+  {
+    "word": "complement",
+    "phonetic": "/ˈkɒmplɪment/",
+    "meaning": "a thing that completes or brings to perfection",
+    "meaningCn": "补充；补语",
+    "example": "The wine complements the meal perfectly."
+  },
+  {
+    "word": "complex",
+    "phonetic": "/ˈkɒmpleks/",
+    "meaning": "consisting of many different and connected parts",
+    "meaningCn": "复杂的；综合体",
+    "example": "The issue is more complex than it appears."
+  },
+  {
+    "word": "comply",
+    "phonetic": "/kəmˈplaɪ/",
+    "meaning": "to act in accordance with a request or command",
+    "meaningCn": "遵守；服从",
+    "example": "All employees must comply with the safety regulations."
+  },
+  {
+    "word": "component",
+    "phonetic": "/kəmˈpəʊnənt/",
+    "meaning": "a part or element of a larger whole",
+    "meaningCn": "组成部分；组件",
+    "example": "Each component of the machine must be checked."
+  },
+  {
+    "word": "comprehensive",
+    "phonetic": "/ˌkɒmprɪˈhensɪv/",
+    "meaning": "complete; including all or nearly all elements",
+    "meaningCn": "综合的；全面的",
+    "example": "The report provides a comprehensive analysis of the data."
+  },
+  {
+    "word": "comprise",
+    "phonetic": "/kəmˈpraɪz/",
+    "meaning": "to be made up of; consist of",
+    "meaningCn": "包含；由...组成",
+    "example": "The committee comprises ten members."
+  },
+  {
+    "word": "compromise",
+    "phonetic": "/ˈkɒmprəmaɪz/",
+    "meaning": "an agreement reached by each side making concessions",
+    "meaningCn": "妥协；折中",
+    "example": "They reached a compromise after long negotiations."
+  },
+  {
+    "word": "conceive",
+    "phonetic": "/kənˈsiːv/",
+    "meaning": "to form or devise a plan or idea",
+    "meaningCn": "构想；怀孕",
+    "example": "She conceived a plan to improve sales."
+  },
+  {
+    "word": "concentrate",
+    "phonetic": "/ˈkɒnsntreɪt/",
+    "meaning": "to focus one's attention or mental effort",
+    "meaningCn": "集中；浓缩",
+    "example": "I need to concentrate on my studies."
+  },
+  {
+    "word": "concept",
+    "phonetic": "/ˈkɒnsept/",
+    "meaning": "an abstract idea or general notion",
+    "meaningCn": "概念；观念",
+    "example": "The concept of freedom is important in democracy."
+  },
+  {
+    "word": "conclude",
+    "phonetic": "/kənˈkluːd/",
+    "meaning": "to bring to an end; reach a decision",
+    "meaningCn": "结束；得出结论",
+    "example": "The meeting concluded at 5 PM."
+  },
+  {
+    "word": "concrete",
+    "phonetic": "/ˈkɒŋkriːt/",
+    "meaning": "existing in a material or physical form",
+    "meaningCn": "具体的；混凝土",
+    "example": "We need concrete evidence to support the claim."
+  },
+  {
+    "word": "conduct",
+    "phonetic": "/kənˈdʌkt/",
+    "meaning": "to organize and carry out",
+    "meaningCn": "进行；行为",
+    "example": "The scientist conducted an experiment."
+  },
+  {
+    "word": "confine",
+    "phonetic": "/kənˈfaɪn/",
+    "meaning": "to keep within certain limits",
+    "meaningCn": "限制；禁闭",
+    "example": "The discussion was confined to the main topic."
+  },
+  {
+    "word": "confirm",
+    "phonetic": "/kənˈfɜːrm/",
+    "meaning": "to establish the truth or correctness of something",
+    "meaningCn": "确认；证实",
+    "example": "Please confirm your attendance by Friday."
+  },
+  {
+    "word": "conflict",
+    "phonetic": "/ˈkɒnflɪkt/",
+    "meaning": "a serious disagreement or argument",
+    "meaningCn": "冲突；矛盾",
+    "example": "There is a conflict between the two countries."
+  },
+  {
+    "word": "conform",
+    "phonetic": "/kənˈfɔːrm/",
+    "meaning": "to comply with rules, standards, or laws",
+    "meaningCn": "遵守；符合",
+    "example": "All products must conform to safety standards."
+  },
+  {
+    "word": "confront",
+    "phonetic": "/kənˈfrʌnt/",
+    "meaning": "to face up to and deal with a problem",
+    "meaningCn": "面对；对抗",
+    "example": "We must confront the reality of climate change."
+  },
+  {
+    "word": "consensus",
+    "phonetic": "/kənˈsensəs/",
+    "meaning": "a general agreement among a group of people",
+    "meaningCn": "共识；一致",
+    "example": "The committee reached a consensus on the issue."
+  },
+  {
+    "word": "consent",
+    "phonetic": "/kənˈsent/",
+    "meaning": "permission for something to happen",
+    "meaningCn": "同意；允许",
+    "example": "The patient gave consent for the surgery."
+  },
+  {
+    "word": "consequence",
+    "phonetic": "/ˈkɒnsɪkwəns/",
+    "meaning": "a result or effect of an action",
+    "meaningCn": "后果；结果",
+    "example": "He suffered the consequences of his actions."
+  },
+  {
+    "word": "conserve",
+    "phonetic": "/kənˈsɜːrv/",
+    "meaning": "to protect from harm or destruction",
+    "meaningCn": "保护；保存",
+    "example": "We must conserve energy to protect the environment."
+  },
+  {
+    "word": "considerable",
+    "phonetic": "/kənˈsɪdərəbl/",
+    "meaning": "notably large in size, amount, or extent",
+    "meaningCn": "相当大的；重要的",
+    "example": "The project required considerable effort."
+  },
+  {
+    "word": "consistent",
+    "phonetic": "/kənˈsɪstənt/",
+    "meaning": "unchanging in achievement or effect over time",
+    "meaningCn": "一致的；持续的",
+    "example": "Her work has been consistent throughout the year."
+  },
+  {
+    "word": "constant",
+    "phonetic": "/ˈkɒnstənt/",
+    "meaning": "occurring continuously over a period of time",
+    "meaningCn": "不变的；经常的",
+    "example": "The machine operates at a constant speed."
+  },
+  {
+    "word": "constitute",
+    "phonetic": "/ˈkɒnstɪtjuːt/",
+    "meaning": "to be a component or part of something",
+    "meaningCn": "构成；组成",
+    "example": "Women constitute 60% of the workforce."
+  },
+  {
+    "word": "construct",
+    "phonetic": "/kənˈstrʌkt/",
+    "meaning": "to build or erect something",
+    "meaningCn": "建造；构造",
+    "example": "They plan to construct a new bridge."
+  },
+  {
+    "word": "consult",
+    "phonetic": "/kənˈsʌlt/",
+    "meaning": "to seek information or advice from someone",
+    "meaningCn": "咨询；查阅",
+    "example": "You should consult a doctor about your symptoms."
+  },
+  {
+    "word": "consume",
+    "phonetic": "/kənˈsjuːm/",
+    "meaning": "to eat, drink, or use up",
+    "meaningCn": "消费；消耗",
+    "example": "Americans consume more energy than most countries."
+  },
+  {
+    "word": "contemporary",
+    "phonetic": "/kənˈtempərəri/",
+    "meaning": "living or occurring at the same time",
+    "meaningCn": "当代的；同时代的",
+    "example": "She is interested in contemporary art."
+  },
+  {
+    "word": "contempt",
+    "phonetic": "/kənˈtempt/",
+    "meaning": "the feeling that someone is worthless",
+    "meaningCn": "蔑视；轻视",
+    "example": "He showed contempt for the rules."
+  },
+  {
+    "word": "contend",
+    "phonetic": "/kənˈtend/",
+    "meaning": "to struggle to surmount a difficulty",
+    "meaningCn": "竞争；主张",
+    "example": "Several teams are contending for the championship."
+  },
+  {
+    "word": "context",
+    "phonetic": "/ˈkɒntekst/",
+    "meaning": "the circumstances that form the setting for an event",
+    "meaningCn": "上下文；背景",
+    "example": "You need to understand the context of the conversation."
+  },
+  {
+    "word": "contract",
+    "phonetic": "/ˈkɒntrækt/",
+    "meaning": "a written or spoken agreement intended to be enforceable",
+    "meaningCn": "合同；收缩",
+    "example": "They signed a contract with the company."
+  },
+  {
+    "word": "contradict",
+    "phonetic": "/ˌkɒntrəˈdɪkt/",
+    "meaning": "to deny the truth of a statement",
+    "meaningCn": "反驳；矛盾",
+    "example": "The evidence contradicts his testimony."
+  },
+  {
+    "word": "contribute",
+    "phonetic": "/kənˈtrɪbjuːt/",
+    "meaning": "to give something in order to help achieve something",
+    "meaningCn": "贡献；捐献",
+    "example": "Everyone should contribute to the community."
+  },
+  {
+    "word": "controversy",
+    "phonetic": "/ˈkɒntrəvɜːsi/",
+    "meaning": "disagreement, typically prolonged, public, and heated",
+    "meaningCn": "争论；争议",
+    "example": "The decision caused a lot of controversy."
+  },
+  {
+    "word": "convention",
+    "phonetic": "/kənˈvenʃn/",
+    "meaning": "a way in which something is usually done",
+    "meaningCn": "惯例；大会",
+    "example": "By convention, the president opens the meeting."
+  },
+  {
+    "word": "convert",
+    "phonetic": "/kənˈvɜːrt/",
+    "meaning": "to change the form, character, or function of something",
+    "meaningCn": "转换；转变",
+    "example": "They converted the garage into a studio."
+  },
+  {
+    "word": "convey",
+    "phonetic": "/kənˈveɪ/",
+    "meaning": "to transport or carry to a place",
+    "meaningCn": "传达；运输",
+    "example": "Words cannot convey how grateful I am."
+  },
+  {
+    "word": "convince",
+    "phonetic": "/kənˈvɪns/",
+    "meaning": "to cause someone to believe firmly in something",
+    "meaningCn": "说服；使信服",
+    "example": "She convinced him to change his mind."
+  },
+  {
+    "word": "cooperate",
+    "phonetic": "/kəʊˈɒpəreɪt/",
+    "meaning": "to work jointly with others",
+    "meaningCn": "合作；配合",
+    "example": "The two companies agreed to cooperate on the project."
+  },
+  {
+    "word": "coordinate",
+    "phonetic": "/kəʊˈɔːrdɪneɪt/",
+    "meaning": "to bring the different elements into a harmonious relationship",
+    "meaningCn": "协调；坐标",
+    "example": "She coordinated the efforts of all the teams."
+  },
+  {
+    "word": "cope",
+    "phonetic": "/kəʊp/",
+    "meaning": "to deal effectively with something difficult",
+    "meaningCn": "应对；处理",
+    "example": "She learned to cope with stress through meditation."
+  },
+  {
+    "word": "core",
+    "phonetic": "/kɔːr/",
+    "meaning": "the central or most important part of something",
+    "meaningCn": "核心；果心",
+    "example": "Trust is the core of any good relationship."
+  },
+  {
+    "word": "corporate",
+    "phonetic": "/ˈkɔːrpərət/",
+    "meaning": "relating to a large company or group",
+    "meaningCn": "公司的；法人的",
+    "example": "The corporate culture emphasizes teamwork."
+  },
+  {
+    "word": "correspond",
+    "phonetic": "/ˌkɒrɪˈspɒnd/",
+    "meaning": "to have a close similarity; match",
+    "meaningCn": "通信；相当",
+    "example": "The two accounts do not correspond with each other."
+  },
+  {
+    "word": "corrupt",
+    "phonetic": "/kəˈrʌpt/",
+    "meaning": "having or showing a willingness to act dishonestly",
+    "meaningCn": "腐败的；堕落的",
+    "example": "The corrupt official was arrested."
+  },
+  {
+    "word": "crucial",
+    "phonetic": "/ˈkruːʃl/",
+    "meaning": "of great importance",
+    "meaningCn": "关键的；决定性的",
+    "example": "This is a crucial moment in the negotiations."
+  },
+  {
+    "word": "cultivate",
+    "phonetic": "/ˈkʌltɪveɪt/",
+    "meaning": "to prepare and use land for crops or gardening",
+    "meaningCn": "培养；耕种",
+    "example": "Farmers cultivate the land to grow crops."
+  },
+  {
+    "word": "currency",
+    "phonetic": "/ˈkʌrənsi/",
+    "meaning": "a system of money in general use in a particular country",
+    "meaningCn": "货币；通用",
+    "example": "The local currency is the yuan."
+  },
+  {
+    "word": "curriculum",
+    "phonetic": "/kəˈrɪkjələm/",
+    "meaning": "the subjects comprising a course of study",
+    "meaningCn": "课程；课程表",
+    "example": "The school revised its curriculum this year."
+  },
+  {
+    "word": "debate",
+    "phonetic": "/dɪˈbeɪt/",
+    "meaning": "a formal discussion on a particular topic",
+    "meaningCn": "辩论；讨论",
+    "example": "The students held a debate on climate change."
+  },
+  {
+    "word": "decade",
+    "phonetic": "/ˈdekeɪd/",
+    "meaning": "a period of ten years",
+    "meaningCn": "十年",
+    "example": "The city has changed a lot over the past decade."
+  },
+  {
+    "word": "decline",
+    "phonetic": "/dɪˈklaɪn/",
+    "meaning": "to politely refuse or become smaller",
+    "meaningCn": "下降；拒绝",
+    "example": "Sales have declined by 10% this year."
+  },
+  {
+    "word": "dedicate",
+    "phonetic": "/ˈdedɪkeɪt/",
+    "meaning": "to devote time, effort, or oneself to something",
+    "meaningCn": "奉献；致力于",
+    "example": "She dedicated her life to helping others."
+  },
+  {
+    "word": "define",
+    "phonetic": "/dɪˈfaɪn/",
+    "meaning": "to state or describe exactly the nature of something",
+    "meaningCn": "定义；解释",
+    "example": "How do you define success?"
+  },
+  {
+    "word": "definite",
+    "phonetic": "/ˈdefɪnət/",
+    "meaning": "clearly stated or decided; not vague",
+    "meaningCn": "明确的；肯定的",
+    "example": "We need a definite answer by tomorrow."
+  },
+  {
+    "word": "deliberate",
+    "phonetic": "/dɪˈlɪbərət/",
+    "meaning": "done consciously and intentionally",
+    "meaningCn": "故意的；深思熟虑的",
+    "example": "The mistake was deliberate, not accidental."
+  },
+  {
+    "word": "demand",
+    "phonetic": "/dɪˈmɑːnd/",
+    "meaning": "an insistent and peremptory request",
+    "meaningCn": "要求；需求",
+    "example": "There is a high demand for skilled workers."
+  },
+  {
+    "word": "demonstrate",
+    "phonetic": "/ˈdemənstreɪt/",
+    "meaning": "to clearly show the existence or truth of something",
+    "meaningCn": "证明；演示",
+    "example": "The experiment demonstrated the theory."
+  },
+  {
+    "word": "deny",
+    "phonetic": "/dɪˈnaɪ/",
+    "meaning": "to state that something is not true",
+    "meaningCn": "否认；拒绝",
+    "example": "He denied any involvement in the crime."
+  },
+  {
+    "word": "depend",
+    "phonetic": "/dɪˈpend/",
+    "meaning": "to be controlled or determined by",
+    "meaningCn": "依赖；取决于",
+    "example": "The outcome depends on many factors."
+  },
+  {
+    "word": "depict",
+    "phonetic": "/dɪˈpɪkt/",
+    "meaning": "to show or represent by a drawing, painting, or other art form",
+    "meaningCn": "描绘；描述",
+    "example": "The painting depicts a beautiful landscape."
+  },
+  {
+    "word": "derive",
+    "phonetic": "/dɪˈraɪv/",
+    "meaning": "to obtain something from a specified source",
+    "meaningCn": "获得；源于",
+    "example": "She derives great pleasure from reading."
+  },
+  {
+    "word": "design",
+    "phonetic": "/dɪˈzaɪn/",
+    "meaning": "to plan and make something for a specific purpose",
+    "meaningCn": "设计；计划",
+    "example": "The architect designed a beautiful building."
+  },
+  {
+    "word": "desire",
+    "phonetic": "/dɪˈzaɪər/",
+    "meaning": "a strong feeling of wanting something",
+    "meaningCn": "渴望；欲望",
+    "example": "She has a strong desire to succeed."
+  },
+  {
+    "word": "despite",
+    "phonetic": "/dɪˈspaɪt/",
+    "meaning": "without being affected by; in spite of",
+    "meaningCn": "尽管；不管",
+    "example": "Despite the rain, we went for a walk."
+  },
+  {
+    "word": "detect",
+    "phonetic": "/dɪˈtekt/",
+    "meaning": "to discover or identify the presence of something",
+    "meaningCn": "发现；检测",
+    "example": "The sensor can detect changes in temperature."
+  },
+  {
+    "word": "determine",
+    "phonetic": "/dɪˈtɜːrmɪn/",
+    "meaning": "to cause something to occur in a particular way",
+    "meaningCn": "决定；确定",
+    "example": "Your attitude determines your success."
+  },
+  {
+    "word": "devote",
+    "phonetic": "/dɪˈvəʊt/",
+    "meaning": "to give all or a large part of one's time or resources",
+    "meaningCn": "奉献；致力于",
+    "example": "She devoted herself to her career."
+  },
+  {
+    "word": "dimension",
+    "phonetic": "/daɪˈmenʃn/",
+    "meaning": "a measurable extent of a particular kind",
+    "meaningCn": "维度；尺寸",
+    "example": "The room has the dimensions of 5 meters by 3 meters."
+  },
+  {
+    "word": "diminish",
+    "phonetic": "/dɪˈmɪnɪʃ/",
+    "meaning": "to make or become less",
+    "meaningCn": "减少；缩小",
+    "example": "The pain gradually diminished over time."
+  },
+  {
+    "word": "discipline",
+    "phonetic": "/ˈdɪsɪplɪn/",
+    "meaning": "the practice of training people to obey rules",
+    "meaningCn": "纪律；学科",
+    "example": "Success requires discipline and hard work."
+  },
+  {
+    "word": "discount",
+    "phonetic": "/ˈdɪskaʊnt/",
+    "meaning": "a reduction in the usual price",
+    "meaningCn": "折扣；贴现",
+    "example": "The store offers a 20% discount on all items."
+  },
+  {
+    "word": "discover",
+    "phonetic": "/dɪˈskʌvər/",
+    "meaning": "to find or learn something for the first time",
+    "meaningCn": "发现；发觉",
+    "example": "Scientists discovered a new species of fish."
+  },
+  {
+    "word": "discriminate",
+    "phonetic": "/dɪˈskrɪmɪneɪt/",
+    "meaning": "to make an unjust distinction between people",
+    "meaningCn": "歧视；区分",
+    "example": "It is illegal to discriminate based on race."
+  },
+  {
+    "word": "displace",
+    "phonetic": "/dɪsˈpleɪs/",
+    "meaning": "to move something from its proper position",
+    "meaningCn": "取代；迫使离开",
+    "example": "The war displaced thousands of families."
+  },
+  {
+    "word": "display",
+    "phonetic": "/dɪˈspleɪ/",
+    "meaning": "to put something in a prominent place for others to see",
+    "meaningCn": "展示；显示",
+    "example": "The museum displays ancient artifacts."
+  },
+  {
+    "word": "dispose",
+    "phonetic": "/dɪˈspəʊz/",
+    "meaning": "to get rid of something unwanted",
+    "meaningCn": "处理；处置",
+    "example": "Please dispose of the waste properly."
+  },
+  {
+    "word": "distinct",
+    "phonetic": "/dɪˈstɪŋkt/",
+    "meaning": "recognizably different in nature from something else",
+    "meaningCn": "明显的；不同的",
+    "example": "There is a distinct difference between the two."
+  },
+  {
+    "word": "distinguish",
+    "phonetic": "/dɪˈstɪŋɡwɪʃ/",
+    "meaning": "to recognize or treat as different",
+    "meaningCn": "区分；辨别",
+    "example": "It's hard to distinguish between the twins."
+  },
+  {
+    "word": "distribute",
+    "phonetic": "/dɪˈstrɪbjuːt/",
+    "meaning": "to give shares of something to a number of recipients",
+    "meaningCn": "分配；分发",
+    "example": "The teacher distributed the test papers."
+  },
+  {
+    "word": "diverse",
+    "phonetic": "/daɪˈvɜːrs/",
+    "meaning": "showing a great deal of variety",
+    "meaningCn": "多样的；不同的",
+    "example": "The city has a diverse population."
+  },
+  {
+    "word": "document",
+    "phonetic": "/ˈdɒkjumənt/",
+    "meaning": "a piece of written, printed, or electronic matter",
+    "meaningCn": "文件；记录",
+    "example": "Please sign the document before submitting."
+  },
+  {
+    "word": "domain",
+    "phonetic": "/dəˈmeɪn/",
+    "meaning": "an area of territory or field of activity",
+    "meaningCn": "领域；域",
+    "example": "This topic is outside my domain of expertise."
+  },
+  {
+    "word": "domestic",
+    "phonetic": "/dəˈmestɪk/",
+    "meaning": "relating to the home or one's own country",
+    "meaningCn": "国内的；家庭的",
+    "example": "The company focuses on domestic sales."
+  },
+  {
+    "word": "dominate",
+    "phonetic": "/ˈdɒmɪneɪt/",
+    "meaning": "to have a commanding influence over",
+    "meaningCn": "支配；占主导地位",
+    "example": "The team dominated the tournament."
+  },
+  {
+    "word": "draft",
+    "phonetic": "/drɑːft/",
+    "meaning": "a preliminary version of a piece of writing",
+    "meaningCn": "草稿；草案",
+    "example": "She submitted the first draft of her essay."
+  },
+  {
+    "word": "drama",
+    "phonetic": "/ˈdrɑːmə/",
+    "meaning": "a play for theater, radio, or television",
+    "meaningCn": "戏剧；剧本",
+    "example": "The school performed a drama by Shakespeare."
+  },
+  {
+    "word": "duration",
+    "phonetic": "/djuˈreɪʃn/",
+    "meaning": "the time during which something continues",
+    "meaningCn": "持续时间",
+    "example": "The duration of the flight is three hours."
+  },
+  {
+    "word": "dynamic",
+    "phonetic": "/daɪˈnæmɪk/",
+    "meaning": "characterized by constant change, activity, or progress",
+    "meaningCn": "动态的；有活力的",
+    "example": "The company has a dynamic work environment."
+  }
+]
