@@ -26,26 +26,31 @@ function generateQuestion(word: WordItem, allWords: WordItem[]): Question {
     const otherMeanings = [...new Set(
       allWords.filter((w) => w.id !== word.id).map((w) => w.meaningCn)
     )]
-    options = shuffleArray([correctAnswer, ...getRandomItems(otherMeanings, 3)])
+    options = [correctAnswer, ...getRandomItems(otherMeanings, 3)]
   } else if (type === "cn2en") {
     correctAnswer = word.word
     const otherWords = [...new Set(
       allWords.filter((w) => w.id !== word.id).map((w) => w.word)
     )]
-    options = shuffleArray([correctAnswer, ...getRandomItems(otherWords, 3)])
+    options = [correctAnswer, ...getRandomItems(otherWords, 3)]
   } else {
     // listening
     correctAnswer = word.word
     const otherWords = [...new Set(
       allWords.filter((w) => w.id !== word.id).map((w) => w.word)
     )]
-    options = shuffleArray([correctAnswer, ...getRandomItems(otherWords, 3)])
+    options = [correctAnswer, ...getRandomItems(otherWords, 3)]
   }
+
+  // Deduplicate options (correct answer may appear in distractors if meanings overlap)
+  options = [...new Set(options)]
 
   // Ensure minimum 4 options (pad with placeholders if word pool is too small)
   while (options.length < 4) {
     options.push(`选项${options.length + 1}`)
   }
+
+  options = shuffleArray(options)
 
   return {
     id: word.id + "-" + type,
@@ -98,7 +103,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
     const isCorrect = answer === question.correctAnswer
     const baseScore = isCorrect ? 100 : 0
-    const timeBonus = isCorrect ? Math.max(0, Math.floor((5000 - timeMs) / 100)) : 0
+    const timeBonus = isCorrect ? Math.max(0, Math.floor((15000 - timeMs) / 100)) : 0
     const totalScore = baseScore + timeBonus
 
     const scoreKey = player === 1 ? "score1" : "score2"

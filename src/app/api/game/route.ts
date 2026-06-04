@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/db"
 
 const VALID_MODES = ["ai", "realtime", "async"]
-const VALID_LEVELS = ["CET4", "CET6", "TOEFL", "IELTS", "GRE"]
+const VALID_LEVELS = ["CET4", "CET6", "TOEFL", "IELTS"]
 
 export async function POST(req: NextRequest) {
   try {

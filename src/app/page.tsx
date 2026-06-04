@@ -32,101 +32,136 @@ export default function Home() {
   ]
 
   const levels = [
-    { name: "CET-4", desc: "大学英语四级", color: "from-green-400 to-emerald-500" },
-    { name: "CET-6", desc: "大学英语六级", color: "from-blue-400 to-cyan-500" },
-    { name: "TOEFL", desc: "托福词汇", color: "from-purple-400 to-pink-500" },
-    { name: "IELTS", desc: "雅思词汇", color: "from-orange-400 to-red-500" },
+    { name: "CET-4", desc: "大学英语四级", accent: "bg-accent-teal" },
+    { name: "CET-6", desc: "大学英语六级", accent: "bg-primary" },
+    { name: "TOEFL", desc: "托福词汇", accent: "bg-accent-amber" },
+    { name: "IELTS", desc: "雅思词汇", accent: "bg-surface-dark" },
   ]
 
   return (
     <div className="min-h-[calc(100vh-4rem)]">
-      {/* Hero Section */}
-      <section className="relative overflow-hidden bg-gradient-to-br from-blue-600 via-purple-600 to-pink-500 text-white">
-        <div className="absolute inset-0 bg-[url('/grid.svg')] opacity-10"></div>
-        <div className="relative max-w-6xl mx-auto px-4 py-16 md:py-24 text-center">
-          <div className="inline-flex items-center gap-2 bg-white/20 backdrop-blur-sm rounded-full px-4 py-2 mb-8">
-            <span className="animate-bounce">⚔️</span>
-            <span className="text-sm font-medium">英语单词PK对战平台</span>
-          </div>
-          <h1 className="text-4xl md:text-7xl font-bold mb-6 bg-clip-text text-transparent bg-gradient-to-r from-white to-yellow-200">
-            Word Battle
-          </h1>
-          <p className="text-base md:text-2xl text-white/80 mb-8 md:mb-10 max-w-2xl mx-auto">
-            与朋友一起PK英语单词，在游戏中提升词汇量，让学习变得更有趣！
-          </p>
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            {user ? (
-              <Link href="/game">
-                <Button size="lg" className="bg-white text-purple-600 hover:bg-yellow-100 shadow-xl text-base md:text-lg px-6 md:px-8 py-3 md:py-4">
-                  🚀 开始PK
-                </Button>
-              </Link>
-            ) : (
-              <>
-                <Link href="/register">
-                  <Button size="lg" className="bg-white text-purple-600 hover:bg-yellow-100 shadow-xl text-base md:text-lg px-6 md:px-8 py-3 md:py-4">
-                    🎮 免费注册
-                  </Button>
-                </Link>
-                <Link href="/login">
-                  <Button size="lg" variant="outline" className="border-white text-white hover:bg-white/20 text-base md:text-lg px-6 md:px-8 py-3 md:py-4">
-                    登录账号
-                  </Button>
-                </Link>
-              </>
-            )}
-          </div>
-          {/* Stats */}
-          <div className="flex justify-center gap-6 md:gap-12 mt-10 md:mt-16">
-            <div className="text-center">
-              <p className="text-2xl md:text-3xl font-bold">500+</p>
-              <p className="text-white/60 text-xs md:text-sm">核心词汇</p>
+      {/* Hero Section — Cream canvas with serif headline */}
+      <section className="bg-canvas">
+        <div className="max-w-6xl mx-auto px-4 py-20 md:py-32">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
+            {/* Left — Text */}
+            <div>
+              <div className="inline-flex items-center gap-2 bg-surface-card rounded-full px-4 py-2 mb-6">
+                <span className="animate-bounce">⚔️</span>
+                <span className="text-sm font-medium text-body-strong">英语单词PK对战平台</span>
+              </div>
+              <h1 className="font-display text-5xl md:text-7xl font-medium text-ink leading-[1.05] tracking-[-0.02em] mb-6">
+                Word Battle
+              </h1>
+              <p className="text-lg md:text-xl text-muted mb-8 max-w-lg leading-relaxed">
+                与朋友一起PK英语单词，在游戏中提升词汇量，让学习变得更有趣！
+              </p>
+              <div className="flex flex-col sm:flex-row gap-3">
+                {user ? (
+                  <Link href="/game">
+                    <Button size="lg" className="text-base px-8 py-4">
+                      🚀 开始PK
+                    </Button>
+                  </Link>
+                ) : (
+                  <>
+                    <Link href="/register">
+                      <Button size="lg" className="text-base px-8 py-4">
+                        🎮 免费注册
+                      </Button>
+                    </Link>
+                    <Link href="/login">
+                      <Button size="lg" variant="outline" className="text-base px-8 py-4">
+                        登录账号
+                      </Button>
+                    </Link>
+                  </>
+                )}
+              </div>
             </div>
-            <div className="text-center">
-              <p className="text-2xl md:text-3xl font-bold">4种</p>
-              <p className="text-white/60 text-xs md:text-sm">词汇级别</p>
-            </div>
-            <div className="text-center">
-              <p className="text-2xl md:text-3xl font-bold">3种</p>
-              <p className="text-white/60 text-xs md:text-sm">题型模式</p>
-            </div>
-          </div>
-        </div>
-      </section>
 
-      {/* Features */}
-      <section className="max-w-6xl mx-auto px-4 py-12 md:py-20">
-        <h2 className="text-2xl md:text-3xl font-bold text-center text-gray-900 mb-4">核心功能</h2>
-        <p className="text-center text-gray-500 mb-8 md:mb-12">多种模式，满足不同学习需求</p>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {features.map((feature) => (
-            <Card key={feature.title} className="hover:shadow-lg transition-shadow">
-              <CardContent className="p-6 text-center">
-                <div className="w-16 h-16 mx-auto mb-4 bg-gradient-to-br from-blue-50 to-purple-50 rounded-2xl flex items-center justify-center text-3xl">
-                  {feature.icon}
+            {/* Right — Dark product mockup card */}
+            <div className="hidden lg:block">
+              <div className="bg-surface-dark rounded-xl p-8 text-on-dark">
+                <div className="flex items-center gap-2 mb-6">
+                  <div className="w-3 h-3 rounded-full bg-error/60"></div>
+                  <div className="w-3 h-3 rounded-full bg-warning/60"></div>
+                  <div className="w-3 h-3 rounded-full bg-success/60"></div>
+                  <span className="ml-3 text-on-dark-soft text-xs font-mono">game.tsx</span>
                 </div>
-                <h3 className="font-semibold text-lg mb-2">{feature.title}</h3>
-                <p className="text-sm text-gray-500">{feature.description}</p>
-              </CardContent>
-            </Card>
-          ))}
+                <div className="font-mono text-sm space-y-3 text-on-dark-soft">
+                  <p><span className="text-accent-teal">const</span> <span className="text-on-dark">question</span> = <span className="text-accent-amber">generateQuestion</span>();</p>
+                  <p><span className="text-accent-teal">const</span> <span className="text-on-dark">answer</span> = <span className="text-accent-amber">playerSelect</span>();</p>
+                  <p><span className="text-accent-teal">if</span> (<span className="text-on-dark">answer</span> === <span className="text-on-dark">correct</span>) {'{'}</p>
+                  <p className="pl-4"><span className="text-on-dark">score</span> += <span className="text-accent-amber">100</span>;</p>
+                  <p className="pl-4"><span className="text-on-dark">combo</span>++;</p>
+                  <p>{'}'}</p>
+                  <p className="mt-4 text-success">{"// ✓ 回答正确！+150分"}</p>
+                </div>
+                <div className="mt-6 pt-4 border-t border-surface-dark-elevated flex items-center justify-between">
+                  <span className="text-xs text-on-dark-soft">Round 7/10</span>
+                  <span className="text-xs text-accent-teal">● 正在对战</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Stats */}
+          <div className="flex justify-start gap-12 mt-16 pt-8 border-t border-hairline-soft">
+            <div>
+              <p className="font-display text-3xl font-medium text-ink">18000+</p>
+              <p className="text-muted text-sm mt-1">核心词汇</p>
+            </div>
+            <div>
+              <p className="font-display text-3xl font-medium text-ink">4种</p>
+              <p className="text-muted text-sm mt-1">词汇级别</p>
+            </div>
+            <div>
+              <p className="font-display text-3xl font-medium text-ink">3种</p>
+              <p className="text-muted text-sm mt-1">题型模式</p>
+            </div>
+          </div>
         </div>
       </section>
 
-      {/* Word Levels */}
-      <section className="bg-white py-12 md:py-20">
-        <div className="max-w-6xl mx-auto px-4">
-          <h2 className="text-2xl md:text-3xl font-bold text-center text-gray-900 mb-4">词汇级别</h2>
-          <p className="text-center text-gray-500 mb-8 md:mb-12">从基础到高级，循序渐进</p>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
+      {/* Features — Cream card grid */}
+      <section className="bg-surface-soft">
+        <div className="max-w-6xl mx-auto px-4 py-20 md:py-24">
+          <h2 className="font-display text-3xl md:text-4xl font-medium text-center text-ink mb-3 tracking-tight">核心功能</h2>
+          <p className="text-center text-muted mb-12">多种模式，满足不同学习需求</p>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+            {features.map((feature) => (
+              <Card key={feature.title} className="hover:shadow-subtle transition-shadow">
+                <CardContent className="p-8 text-center">
+                  <div className="w-14 h-14 mx-auto mb-5 bg-surface-cream-strong rounded-lg flex items-center justify-center text-2xl">
+                    {feature.icon}
+                  </div>
+                  <h3 className="font-display text-lg font-medium mb-2 text-ink">{feature.title}</h3>
+                  <p className="text-sm text-muted leading-relaxed">{feature.description}</p>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Word Levels — Clean grid on canvas */}
+      <section className="bg-canvas">
+        <div className="max-w-6xl mx-auto px-4 py-20 md:py-24">
+          <h2 className="font-display text-3xl md:text-4xl font-medium text-center text-ink mb-3 tracking-tight">词汇级别</h2>
+          <p className="text-center text-muted mb-12">从基础到高级，循序渐进</p>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-5">
             {levels.map((level) => (
               <div
                 key={level.name}
                 className="group cursor-pointer"
               >
-                <div className={`bg-gradient-to-br ${level.color} rounded-2xl p-4 md:p-6 text-white transform group-hover:scale-105 transition-transform`}>
-                  <p className="text-xl md:text-2xl font-bold mb-1">{level.name}</p>
-                  <p className="text-white/80 text-xs md:text-sm">{level.desc}</p>
+                <div className="bg-surface-card border border-hairline-soft rounded-lg p-5 md:p-6 transform group-hover:scale-[1.02] transition-transform">
+                  <div className={`w-10 h-10 ${level.accent} rounded-md flex items-center justify-center mb-4`}>
+                    <span className="text-on-primary font-bold text-sm">{level.name.charAt(0)}</span>
+                  </div>
+                  <p className="font-display text-xl md:text-2xl font-medium text-ink mb-1">{level.name}</p>
+                  <p className="text-muted text-sm">{level.desc}</p>
                 </div>
               </div>
             ))}
@@ -134,21 +169,31 @@ export default function Home() {
         </div>
       </section>
 
-      {/* CTA */}
-      <section className="max-w-6xl mx-auto px-4 py-12 md:py-20 text-center">
-        <h2 className="text-2xl md:text-3xl font-bold text-gray-900 mb-4">准备好挑战了吗？</h2>
-        <p className="text-gray-500 mb-6 md:mb-8">立即开始你的英语单词PK之旅！</p>
-        <Link href={user ? "/game" : "/register"}>
-          <Button size="lg" variant="primary" className="text-base md:text-lg px-8 md:px-10 py-3 md:py-4">
-            {user ? "开始游戏" : "立即注册"}
-          </Button>
-        </Link>
+      {/* CTA — Coral callout band */}
+      <section className="max-w-6xl mx-auto px-4 py-20 md:py-24">
+        <div className="bg-primary rounded-xl px-8 py-16 md:px-16 md:py-20 text-center">
+          <h2 className="font-display text-2xl md:text-3xl font-medium text-on-primary mb-4 tracking-tight">准备好挑战了吗？</h2>
+          <p className="text-on-primary/80 mb-8 text-lg">立即开始你的英语单词PK之旅！</p>
+          <Link href={user ? "/game" : "/register"}>
+            <Button size="lg" variant="secondary" className="bg-canvas text-ink hover:bg-surface-soft text-base px-10 py-4">
+              {user ? "开始游戏" : "立即注册"}
+            </Button>
+          </Link>
+        </div>
       </section>
 
-      {/* Footer */}
-      <footer className="bg-gray-900 text-white py-8">
-        <div className="max-w-6xl mx-auto px-4 text-center text-sm text-gray-400">
-          <p>© 2026 Word Battle. All rights reserved.</p>
+      {/* Footer — Dark navy */}
+      <footer className="bg-surface-dark text-on-dark-soft py-16">
+        <div className="max-w-6xl mx-auto px-4">
+          <div className="flex items-center gap-2.5 mb-8">
+            <div className="w-7 h-7 bg-primary rounded-md flex items-center justify-center">
+              <span className="text-on-primary font-bold text-xs">W</span>
+            </div>
+            <span className="font-display text-lg font-medium text-on-dark">Word Battle</span>
+          </div>
+          <div className="border-t border-surface-dark-elevated pt-8">
+            <p className="text-sm">© 2026 Word Battle. All rights reserved.</p>
+          </div>
         </div>
       </footer>
     </div>

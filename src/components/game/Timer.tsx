@@ -13,11 +13,11 @@ export function Timer({ seconds, total }: TimerProps) {
 
   return (
     <div className="flex items-center gap-3">
-      <div className="relative h-2 w-32 overflow-hidden rounded-full bg-gray-200">
+      <div className="relative h-2 w-32 overflow-hidden rounded-full bg-hairline-soft">
         <div
           className={cn(
             "h-full transition-all duration-1000 ease-linear rounded-full",
-            isLow ? "bg-red-500" : "bg-blue-500"
+            isLow ? "bg-error" : "bg-primary"
           )}
           style={{ width: `${progress}%` }}
         />
@@ -25,7 +25,7 @@ export function Timer({ seconds, total }: TimerProps) {
       <span
         className={cn(
           "text-lg font-bold tabular-nums min-w-[2.5rem] text-center",
-          isLow ? "text-red-500 animate-pulse" : "text-gray-700"
+          isLow ? "text-error animate-pulse" : "text-ink"
         )}
       >
         {seconds}s

@@ -33,7 +33,7 @@ export interface Question {
 
 export type GameMode = "ai" | "realtime" | "async"
 export type GameStatus = "waiting" | "playing" | "finished"
-export type WordLevel = "CET4" | "CET6" | "TOEFL" | "IELTS" | "GRE"
+export type WordLevel = "CET4" | "CET6" | "TOEFL" | "IELTS"
 
 export interface GameState {
   mode: GameMode

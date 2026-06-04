@@ -10,17 +10,17 @@ export function Header() {
   const [menuOpen, setMenuOpen] = useState(false)
 
   return (
-    <header className="bg-white border-b border-gray-200 sticky top-0 z-50">
+    <header className="bg-canvas border-b border-hairline sticky top-0 z-50">
       <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
-        <Link href="/" className="flex items-center gap-2 shrink-0">
-          <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
-            <span className="text-white font-bold text-sm">W</span>
+        <Link href="/" className="flex items-center gap-2.5 shrink-0">
+          <div className="w-8 h-8 bg-primary rounded-md flex items-center justify-center">
+            <span className="text-on-primary font-bold text-sm">W</span>
           </div>
-          <span className="font-bold text-xl text-gray-900">Word Battle</span>
+          <span className="font-display text-xl font-medium text-ink tracking-tight">Word Battle</span>
         </Link>
 
         {/* 桌面端导航 */}
-        <nav className="hidden md:flex items-center gap-4">
+        <nav className="hidden md:flex items-center gap-1">
           {user ? (
             <>
               <Link href="/game">
@@ -35,13 +35,13 @@ export function Header() {
               <Link href="/history">
                 <Button variant="ghost" size="sm">历史记录</Button>
               </Link>
-              <div className="flex items-center gap-3 ml-2">
-                <div className="w-8 h-8 bg-gradient-to-br from-green-400 to-blue-500 rounded-full flex items-center justify-center">
-                  <span className="text-white text-sm font-medium">
+              <div className="flex items-center gap-3 ml-3 pl-3 border-l border-hairline">
+                <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center">
+                  <span className="text-on-primary text-sm font-medium">
                     {user.username.charAt(0).toUpperCase()}
                   </span>
                 </div>
-                <span className="text-sm font-medium text-gray-700">{user.username}</span>
+                <span className="text-sm font-medium text-ink">{user.username}</span>
                 <Button variant="ghost" size="sm" onClick={logout}>
                   退出
                 </Button>
@@ -65,24 +65,24 @@ export function Header() {
           onClick={() => setMenuOpen(!menuOpen)}
           aria-label="菜单"
         >
-          <span className={`block w-5 h-0.5 bg-gray-700 transition-transform ${menuOpen ? "rotate-45 translate-y-2" : ""}`} />
-          <span className={`block w-5 h-0.5 bg-gray-700 transition-opacity ${menuOpen ? "opacity-0" : ""}`} />
-          <span className={`block w-5 h-0.5 bg-gray-700 transition-transform ${menuOpen ? "-rotate-45 -translate-y-2" : ""}`} />
+          <span className={`block w-5 h-0.5 bg-ink transition-transform ${menuOpen ? "rotate-45 translate-y-2" : ""}`} />
+          <span className={`block w-5 h-0.5 bg-ink transition-opacity ${menuOpen ? "opacity-0" : ""}`} />
+          <span className={`block w-5 h-0.5 bg-ink transition-transform ${menuOpen ? "-rotate-45 -translate-y-2" : ""}`} />
         </button>
       </div>
 
       {/* 移动端菜单 */}
       {menuOpen && (
-        <div className="md:hidden border-t border-gray-100 bg-white px-4 py-4 space-y-2">
+        <div className="md:hidden border-t border-hairline bg-canvas px-4 py-4 space-y-1">
           {user ? (
             <>
               <div className="flex items-center gap-3 px-3 py-2 mb-2">
-                <div className="w-8 h-8 bg-gradient-to-br from-green-400 to-blue-500 rounded-full flex items-center justify-center">
-                  <span className="text-white text-sm font-medium">
+                <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center">
+                  <span className="text-on-primary text-sm font-medium">
                     {user.username.charAt(0).toUpperCase()}
                   </span>
                 </div>
-                <span className="text-sm font-medium text-gray-700">{user.username}</span>
+                <span className="text-sm font-medium text-ink">{user.username}</span>
               </div>
               <Link href="/game" onClick={() => setMenuOpen(false)}>
                 <Button variant="ghost" size="sm" className="w-full justify-start">开始PK</Button>
@@ -96,9 +96,11 @@ export function Header() {
               <Link href="/history" onClick={() => setMenuOpen(false)}>
                 <Button variant="ghost" size="sm" className="w-full justify-start">历史记录</Button>
               </Link>
-              <Button variant="ghost" size="sm" className="w-full justify-start text-red-500" onClick={() => { logout(); setMenuOpen(false) }}>
-                退出登录
-              </Button>
+              <div className="pt-2 mt-2 border-t border-hairline">
+                <Button variant="ghost" size="sm" className="w-full justify-start text-error" onClick={() => { logout(); setMenuOpen(false) }}>
+                  退出登录
+                </Button>
+              </div>
             </>
           ) : (
             <>

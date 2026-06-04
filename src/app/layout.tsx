@@ -1,10 +1,19 @@
 import type { Metadata } from "next"
-import { Inter } from "next/font/google"
+import { Inter, Cormorant_Garamond } from "next/font/google"
 import "./globals.css"
 import { Header } from "@/components/layout/Header"
 import { AuthProvider } from "@/components/providers/AuthProvider"
 
-const inter = Inter({ subsets: ["latin"] })
+const inter = Inter({
+  subsets: ["latin"],
+  variable: "--font-body",
+})
+
+const cormorant = Cormorant_Garamond({
+  subsets: ["latin"],
+  weight: ["400", "500", "600"],
+  variable: "--font-display",
+})
 
 export const metadata: Metadata = {
   title: "Word Battle - 英语单词PK",
@@ -17,8 +26,8 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="zh-CN" className={inter.className}>
-      <body className="min-h-screen bg-gray-50">
+    <html lang="zh-CN" className={`${inter.variable} ${cormorant.variable}`}>
+      <body className="min-h-screen bg-canvas text-body">
         <AuthProvider>
           <Header />
           <main className="flex-1">

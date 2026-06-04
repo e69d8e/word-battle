@@ -56,8 +56,8 @@ export default function RegisterPage() {
     <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center p-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
-          <div className="w-16 h-16 mx-auto mb-4 bg-gradient-to-br from-green-500 to-emerald-600 rounded-2xl flex items-center justify-center">
-            <span className="text-white text-2xl">🎮</span>
+          <div className="w-16 h-16 mx-auto mb-4 bg-accent-teal rounded-xl flex items-center justify-center">
+            <span className="text-on-primary text-2xl">🎮</span>
           </div>
           <CardTitle className="text-2xl">创建账号</CardTitle>
           <CardDescription>加入 Word Battle，开始你的单词PK之旅</CardDescription>
@@ -65,12 +65,12 @@ export default function RegisterPage() {
         <form onSubmit={handleSubmit}>
           <CardContent className="space-y-4">
             {error && (
-              <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-600">
+              <div className="p-3 bg-error/10 border border-error/20 rounded-md text-sm text-error">
                 {error}
               </div>
             )}
             <div className="space-y-2">
-              <label htmlFor="username" className="text-sm font-medium text-gray-700">
+              <label htmlFor="username" className="text-sm font-medium text-body-strong">
                 用户名
               </label>
               <Input
@@ -83,7 +83,7 @@ export default function RegisterPage() {
               />
             </div>
             <div className="space-y-2">
-              <label htmlFor="password" className="text-sm font-medium text-gray-700">
+              <label htmlFor="password" className="text-sm font-medium text-body-strong">
                 密码
               </label>
               <Input
@@ -96,7 +96,7 @@ export default function RegisterPage() {
               />
             </div>
             <div className="space-y-2">
-              <label htmlFor="confirmPassword" className="text-sm font-medium text-gray-700">
+              <label htmlFor="confirmPassword" className="text-sm font-medium text-body-strong">
                 确认密码
               </label>
               <Input
@@ -118,9 +118,9 @@ export default function RegisterPage() {
             >
               {isLoading ? "注册中..." : "注册"}
             </Button>
-            <p className="text-sm text-center text-gray-500">
+            <p className="text-sm text-center text-muted">
               已有账号？{" "}
-              <Link href="/login" className="text-blue-600 hover:underline font-medium">
+              <Link href="/login" className="text-primary hover:underline font-medium">
                 立即登录
               </Link>
             </p>

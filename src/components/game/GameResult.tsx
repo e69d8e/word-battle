@@ -31,16 +31,16 @@ export function GameResult({ result, currentUsername, onPlayAgain, onBackToMenu 
       <div className="text-center py-6">
         <div className={cn(
           "w-24 h-24 mx-auto rounded-full flex items-center justify-center mb-4",
-          isDraw ? "bg-yellow-100" : isCurrentUserWinner ? "bg-green-100" : "bg-red-100"
+          isDraw ? "bg-accent-amber/15" : isCurrentUserWinner ? "bg-success/15" : "bg-error/15"
         )}>
           <span className="text-5xl">
             {isDraw ? "🤝" : isCurrentUserWinner ? "🏆" : "😢"}
           </span>
         </div>
-        <h2 className="text-2xl font-bold mb-2">
+        <h2 className="font-display text-3xl font-medium text-ink mb-2">
           {isDraw ? "平局！" : isCurrentUserWinner ? "恭喜你赢了！" : "很遗憾，你输了"}
         </h2>
-        <p className="text-gray-500">
+        <p className="text-muted">
           {isDraw
             ? "势均力敌，下次再战！"
             : isCurrentUserWinner
@@ -52,42 +52,48 @@ export function GameResult({ result, currentUsername, onPlayAgain, onBackToMenu 
       {/* Score Comparison */}
       <div className="grid grid-cols-3 gap-4">
         <div className={cn(
-          "text-center p-4 rounded-xl",
-          isPlayer1Winner ? "bg-blue-50 border-2 border-blue-200" : "bg-gray-50"
+          "text-center p-5 rounded-lg",
+          isPlayer1Winner ? "bg-primary/10 border-2 border-primary/20" : "bg-surface-card"
         )}>
-          <p className="text-sm text-gray-500 mb-1">{result.player1.username}</p>
-          <p className="text-3xl font-bold text-blue-600">{result.player1.score}</p>
-          <p className="text-xs text-gray-400 mt-1">正确率 {accuracy1}%</p>
+          <p className="text-sm text-muted mb-1">{result.player1.username}</p>
+          <p className="font-display text-4xl font-medium text-primary">{result.player1.score}</p>
+          <p className="text-xs text-muted mt-1">正确率 {accuracy1}%</p>
           {isPlayer1Winner && <span className="text-xs">👑</span>}
         </div>
 
         <div className="flex items-center justify-center">
-          <span className="text-2xl font-bold text-gray-300">VS</span>
+          <span className="font-display text-2xl font-medium text-muted">VS</span>
         </div>
 
         <div className={cn(
-          "text-center p-4 rounded-xl",
-          isPlayer2Winner ? "bg-purple-50 border-2 border-purple-200" : "bg-gray-50"
+          "text-center p-5 rounded-lg",
+          isPlayer2Winner ? "bg-primary/10 border-2 border-primary/20" : "bg-surface-card"
         )}>
-          <p className="text-sm text-gray-500 mb-1">{result.player2.username}</p>
-          <p className="text-3xl font-bold text-purple-600">{result.player2.score}</p>
-          <p className="text-xs text-gray-400 mt-1">正确率 {accuracy2}%</p>
+          <p className="text-sm text-muted mb-1">{result.player2.username}</p>
+          <p className="font-display text-4xl font-medium text-primary">{result.player2.score}</p>
+          <p className="text-xs text-muted mt-1">正确率 {accuracy2}%</p>
           {isPlayer2Winner && <span className="text-xs">👑</span>}
         </div>
       </div>
 
       {/* Question Details */}
       <div className="space-y-2">
-        <h3 className="font-semibold text-gray-700">答题详情</h3>
+        <h3 className="font-medium text-ink">答题详情</h3>
         <div className="space-y-2 max-h-60 overflow-y-auto">
           {result.questions.map((q, i) => (
-            <div key={i} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg text-sm">
-              <span className="font-medium">{q.word}</span>
+            <div key={i} className="flex items-center justify-between p-3 bg-surface-card rounded-lg text-sm">
+              <span className="font-medium text-ink">{q.word}</span>
               <div className="flex items-center gap-4">
-                <span className={cn("px-2 py-0.5 rounded", q.correct1 ? "bg-green-100 text-green-600" : "bg-red-100 text-red-600")}>
+                <span className={cn(
+                  "px-2 py-0.5 rounded",
+                  q.correct1 ? "bg-success/15 text-success" : "bg-error/15 text-error"
+                )}>
                   {result.player1.username}: {q.correct1 ? "✓" : "✗"}
                 </span>
-                <span className={cn("px-2 py-0.5 rounded", q.correct2 ? "bg-green-100 text-green-600" : "bg-red-100 text-red-600")}>
+                <span className={cn(
+                  "px-2 py-0.5 rounded",
+                  q.correct2 ? "bg-success/15 text-success" : "bg-error/15 text-error"
+                )}>
                   {result.player2.username}: {q.correct2 ? "✓" : "✗"}
                 </span>
               </div>

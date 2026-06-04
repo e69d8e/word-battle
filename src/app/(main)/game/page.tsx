@@ -10,6 +10,7 @@ import { QuestionCard } from "@/components/game/QuestionCard"
 import { ScoreBoard } from "@/components/game/ScoreBoard"
 import { Timer } from "@/components/game/Timer"
 import { GameResult } from "@/components/game/GameResult"
+import { AlertDialog } from "@/components/ui/dialog"
 import { getSupabase } from "@/lib/supabase"
 import type { RealtimeChannel } from "@supabase/supabase-js"
 import type { GameMode, WordLevel, WordItem, GameResult as GameResultType } from "@/types"
@@ -29,6 +30,8 @@ export default function GamePage() {
   const [totalQuestions] = useState(10)
   const [timerKey, setTimerKey] = useState(0)
   const [result, setResult] = useState<GameResultType | null>(null)
+  const [showLoginDialog, setShowLoginDialog] = useState(false)
+  const [showLoadingDialog, setShowLoadingDialog] = useState(false)
 
   // Realtime channel ref for multiplayer
   const channelRef = useRef<RealtimeChannel | null>(null)
@@ -66,8 +69,6 @@ export default function GamePage() {
   const answeredRef = useRef(false) // Track if current question has been answered
 
   const handleGameEnd = useCallback(() => {
-    if (!user) return
-
     // Read all state from store to avoid stale closures
     const finalState = useGameStore.getState()
     const finalScore1 = finalState.score1
@@ -76,11 +77,13 @@ export default function GamePage() {
     const finalAnswers2 = finalState.answers2
     const finalMode = finalState.mode
     const finalQuestions = finalState.questions
+    const finalWordLevel = finalState.wordLevel
 
     // For realtime mode, use opponent answers from broadcast
     const opponentAnswers = finalMode === "realtime" ? opponentAnswersRef.current : finalAnswers2
 
-    // Get opponent username
+    // Get player usernames (fallback to "玩家" when not logged in)
+    const p1Username = user?.username || "玩家"
     const p2Username = finalMode === "realtime"
       ? (opponentUsernameRef.current || "对手")
       : "AI 机器人"
@@ -88,11 +91,11 @@ export default function GamePage() {
     const gameResult: GameResultType = {
       gameId: Date.now().toString(),
       mode: finalMode,
-      player1: { username: user.username, score: finalScore1 },
+      player1: { username: p1Username, score: finalScore1 },
       player2: { username: p2Username, score: finalScore2 },
       winner:
         finalScore1 > finalScore2
-          ? user.username
+          ? p1Username
           : finalScore2 > finalScore1
           ? p2Username
           : null,
@@ -110,7 +113,7 @@ export default function GamePage() {
     setIsWaitingForOpponent(false)
 
     // Broadcast game end in realtime mode
-    if (finalMode === "realtime" && channelRef.current) {
+    if (finalMode === "realtime" && channelRef.current && user) {
       channelRef.current.send({
         type: "broadcast",
         event: "game-ended",
@@ -118,13 +121,15 @@ export default function GamePage() {
       })
     }
 
-    // Save game to server
+    // Save game to server only if logged in
+    if (!user) return
+
     fetch("/api/game", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         mode: finalMode,
-        wordLevel: selectedLevel,
+        wordLevel: finalWordLevel,
         player1Id: user.id,
         score1: finalScore1,
         score2: finalScore2,
@@ -150,7 +155,7 @@ export default function GamePage() {
     }).catch((err) => {
       console.error("Failed to save game:", err)
     })
-  }, [user, selectedLevel])
+  }, [user])
 
   const handleTimeout = useCallback(() => {
     // Skip if already answered
@@ -384,7 +389,7 @@ export default function GamePage() {
         const state = useGameStore.getState()
         const q = state.questions[state.currentIndex]
         const baseScore = isCorrect ? 100 : 0
-        const timeBonus = isCorrect ? Math.max(0, Math.floor((5000 - timeMs) / 100)) : 0
+        const timeBonus = isCorrect ? Math.max(0, Math.floor((15000 - timeMs) / 100)) : 0
         const totalScore = baseScore + timeBonus
 
         console.log("[Game] Sending answer-submitted, playerId:", user.id, "isCorrect:", isCorrect)
@@ -461,13 +466,17 @@ export default function GamePage() {
 
   const startGame = () => {
     if (selectedMode === "realtime") {
+      if (!user) {
+        setShowLoginDialog(true)
+        return
+      }
       // Navigate to lobby for realtime mode
       window.location.href = "/lobby"
       return
     }
 
     if (words.length < 10) {
-      alert("单词库加载中，请稍候...")
+      setShowLoadingDialog(true)
       return
     }
     resetGame()
@@ -502,53 +511,53 @@ export default function GamePage() {
   // Mode selection screen
   if (status === "waiting" && !result) {
     return (
-      <div className="max-w-4xl mx-auto px-4 py-12">
-        <h1 className="text-3xl font-bold text-center mb-2">选择对战模式</h1>
-        <p className="text-center text-gray-500 mb-10">选择你喜欢的模式开始挑战</p>
+      <div className="max-w-4xl mx-auto px-4 py-16">
+        <h1 className="font-display text-3xl md:text-4xl font-medium text-center text-ink mb-2 tracking-tight">选择对战模式</h1>
+        <p className="text-center text-muted mb-12">选择你喜欢的模式开始挑战</p>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-12">
           {[
             {
               mode: "ai" as GameMode,
               icon: "🤖",
               title: "人机对战",
               desc: "与AI进行单词PK，适合单人练习",
-              color: "from-green-400 to-emerald-500",
+              accent: "bg-accent-teal",
             },
             {
               mode: "realtime" as GameMode,
               icon: "⚡",
               title: "实时对战",
               desc: "邀请好友实时PK，比拼速度",
-              color: "from-blue-400 to-cyan-500",
+              accent: "bg-primary",
             },
             {
               mode: "async" as GameMode,
               icon: "📨",
               title: "异步挑战",
               desc: "发起挑战，好友随时应战",
-              color: "from-purple-400 to-pink-500",
+              accent: "bg-surface-dark",
               disabled: true,
             },
           ].map((item) => (
             <Card
               key={item.mode}
-              className={`cursor-pointer transition-all hover:shadow-lg ${
-                selectedMode === item.mode ? "ring-2 ring-blue-500 shadow-lg" : ""
+              className={`cursor-pointer transition-all hover:shadow-subtle ${
+                selectedMode === item.mode ? "ring-2 ring-primary shadow-subtle" : ""
               } ${item.disabled ? "opacity-60" : ""}`}
               onClick={() => !item.disabled && setSelectedMode(item.mode)}
             >
-              <CardContent className="p-6 text-center">
-                <div className={`w-20 h-20 mx-auto mb-4 bg-gradient-to-br ${item.color} rounded-2xl flex items-center justify-center text-4xl`}>
+              <CardContent className="p-8 text-center">
+                <div className={`w-16 h-16 mx-auto mb-5 ${item.accent} rounded-lg flex items-center justify-center text-3xl`}>
                   {item.icon}
                 </div>
-                <h3 className="font-bold text-lg mb-2">{item.title}</h3>
-                <p className="text-sm text-gray-500 mb-3">{item.desc}</p>
+                <h3 className="font-display text-lg font-medium mb-2 text-ink">{item.title}</h3>
+                <p className="text-sm text-muted mb-3">{item.desc}</p>
                 {item.disabled && (
                   <Badge variant="warning">即将上线</Badge>
                 )}
                 {selectedMode === item.mode && !item.disabled && (
-                  <Badge variant="info">已选择</Badge>
+                  <Badge variant="coral">已选择</Badge>
                 )}
               </CardContent>
             </Card>
@@ -556,7 +565,7 @@ export default function GamePage() {
         </div>
 
         {/* Word Level Selection */}
-        <Card className="mb-8">
+        <Card className="mb-10">
           <CardHeader>
             <CardTitle>选择词汇级别</CardTitle>
           </CardHeader>
@@ -574,7 +583,7 @@ export default function GamePage() {
                   className="h-auto py-4 flex-col"
                   onClick={() => setSelectedLevel(item.level)}
                 >
-                  <span className="text-lg font-bold">{item.name}</span>
+                  <span className="font-display text-lg font-medium">{item.name}</span>
                   <span className="text-xs mt-1 opacity-70">{item.desc}</span>
                 </Button>
               ))}
@@ -593,10 +602,28 @@ export default function GamePage() {
           >
             {isLoading ? "加载单词中..." : "🚀 开始挑战"}
           </Button>
-          <p className="text-sm text-gray-400 mt-3">
+          <p className="text-sm text-muted mt-3">
             共 {totalQuestions} 题 · 每题 {questionTimeLimit} 秒
           </p>
         </div>
+
+        <AlertDialog
+          open={showLoginDialog}
+          onClose={() => {
+            setShowLoginDialog(false)
+            window.location.href = "/login"
+          }}
+          title="提示"
+          description="请先登录后再进行实时对战"
+          confirmText="去登录"
+        />
+        <AlertDialog
+          open={showLoadingDialog}
+          onClose={() => setShowLoadingDialog(false)}
+          title="提示"
+          description="单词库加载中，请稍候..."
+          confirmText="知道了"
+        />
       </div>
     )
   }
@@ -604,7 +631,7 @@ export default function GamePage() {
   // Game result screen
   if (status === "finished" && result) {
     return (
-      <div className="max-w-2xl mx-auto px-4 py-12">
+      <div className="max-w-2xl mx-auto px-4 py-16">
         <GameResult
           result={result}
           currentUsername={user?.username}
@@ -616,6 +643,12 @@ export default function GamePage() {
         />
       </div>
     )
+  }
+
+  // Safety: game finished but result not set — go back to menu
+  if (status === "finished" && !result) {
+    resetGame()
+    return null
   }
 
   // Game playing screen
@@ -634,12 +667,12 @@ export default function GamePage() {
     <div className="max-w-3xl mx-auto px-4 py-8">
       {/* Waiting for opponent overlay */}
       {isWaitingForOpponent && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-ink/50 flex items-center justify-center z-50">
           <Card className="max-w-sm mx-4">
             <CardContent className="p-8 text-center">
-              <div className="animate-spin w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full mx-auto mb-4" />
-              <h3 className="text-lg font-semibold mb-2">等待对手完成</h3>
-              <p className="text-gray-500">你已完成所有题目，正在等待对手...</p>
+              <div className="animate-spin w-12 h-12 border-4 border-primary border-t-transparent rounded-full mx-auto mb-4" />
+              <h3 className="font-display text-lg font-medium text-ink mb-2">等待对手完成</h3>
+              <p className="text-muted">你已完成所有题目，正在等待对手...</p>
             </CardContent>
           </Card>
         </div>
@@ -670,7 +703,7 @@ export default function GamePage() {
 
       {/* Question */}
       <Card>
-        <CardContent className="p-6">
+        <CardContent className="p-8">
           <QuestionCard
             key={currentQuestion.id}
             question={currentQuestion}

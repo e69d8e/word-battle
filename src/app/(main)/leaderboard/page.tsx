@@ -54,12 +54,12 @@ export default function LeaderboardPage() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-12">
-      <h1 className="text-3xl font-bold text-center mb-2">🏆 排行榜</h1>
-      <p className="text-center text-gray-500 mb-8">查看全球玩家排名</p>
+    <div className="max-w-4xl mx-auto px-4 py-16">
+      <h1 className="font-display text-3xl md:text-4xl font-medium text-center text-ink mb-2 tracking-tight">🏆 排行榜</h1>
+      <p className="text-center text-muted mb-10">查看全球玩家排名</p>
 
       {/* Filters */}
-      <div className="flex flex-wrap gap-4 justify-center mb-8">
+      <div className="flex flex-wrap gap-4 justify-center mb-10">
         <div className="flex gap-2">
           <Button
             size="sm"
@@ -116,24 +116,24 @@ export default function LeaderboardPage() {
         <CardContent>
           {isLoading ? (
             <div className="text-center py-12">
-              <div className="animate-spin w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full mx-auto mb-4"></div>
-              <p className="text-gray-500">加载中...</p>
+              <div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full mx-auto mb-4"></div>
+              <p className="text-muted">加载中...</p>
             </div>
           ) : leaderboard.length === 0 ? (
             <div className="text-center py-12">
               <p className="text-4xl mb-4">🎯</p>
-              <p className="text-gray-500">暂无排名数据</p>
-              <p className="text-sm text-gray-400">快去挑战一局吧！</p>
+              <p className="text-muted">暂无排名数据</p>
+              <p className="text-sm text-muted-soft">快去挑战一局吧！</p>
             </div>
           ) : (
             <div className="space-y-3">
               {leaderboard.map((entry) => (
                 <div
-                  key={entry.userId}
-                  className={`flex items-center justify-between p-4 rounded-xl transition-colors ${
+                  key={`${entry.userId}-${entry.rank}`}
+                  className={`flex items-center justify-between p-4 rounded-lg transition-colors ${
                     entry.rank <= 3
-                      ? "bg-gradient-to-r from-yellow-50 to-orange-50"
-                      : "hover:bg-gray-50"
+                      ? "bg-surface-cream-strong"
+                      : "hover:bg-surface-soft"
                   }`}
                 >
                   <div className="flex items-center gap-4">
@@ -141,17 +141,17 @@ export default function LeaderboardPage() {
                       {getRankEmoji(entry.rank)}
                     </span>
                     <div>
-                      <p className="font-semibold text-gray-900">{entry.username}</p>
+                      <p className="font-medium text-ink">{entry.username}</p>
                       {entry.rank <= 3 && (
-                        <Badge variant={entry.rank === 1 ? "warning" : "info"} className="mt-1">
+                        <Badge variant={entry.rank === 1 ? "coral" : "info"} className="mt-1">
                           {entry.rank === 1 ? "王者" : entry.rank === 2 ? "大师" : "精英"}
                         </Badge>
                       )}
                     </div>
                   </div>
                   <div className="text-right">
-                    <p className="text-2xl font-bold text-blue-600">{entry.score}</p>
-                    <p className="text-xs text-gray-400">分</p>
+                    <p className="font-display text-2xl font-medium text-primary">{entry.score}</p>
+                    <p className="text-xs text-muted">分</p>
                   </div>
                 </div>
               ))}

@@ -14,16 +14,40 @@ const wordDataMap: Record<string, { name: string; data: typeof cet4Data }> = {
   IELTS: { name: "IELTS 核心词汇", data: ieltsData },
 }
 
-// Initialize word list for a specific level if it doesn't exist
+// Initialize or update word list for a specific level
 async function initWordsForLevel(level: string) {
-  const existing = await prisma.wordList.findFirst({
-    where: { level },
-  })
-
-  if (existing) return existing
-
   const wordData = wordDataMap[level]
   if (!wordData) return null
+
+  const existing = await prisma.wordList.findFirst({
+    where: { level },
+    include: { _count: { select: { words: true } } },
+  })
+
+  // If word list exists and word count matches, no update needed
+  if (existing && existing._count.words === wordData.data.length) {
+    return existing
+  }
+
+  // Delete old word list and related data if count changed
+  if (existing) {
+    // Get all word IDs for this word list
+    const oldWords = await prisma.word.findMany({
+      where: { wordListId: existing.id },
+      select: { id: true },
+    })
+    const wordIds = oldWords.map((w) => w.id)
+
+    // Delete game questions referencing these words
+    if (wordIds.length > 0) {
+      await prisma.gameQuestion.deleteMany({
+        where: { wordId: { in: wordIds } },
+      })
+    }
+
+    await prisma.word.deleteMany({ where: { wordListId: existing.id } })
+    await prisma.wordList.delete({ where: { id: existing.id } })
+  }
 
   const wordList = await prisma.wordList.create({
     data: {
