@@ -9,9 +9,11 @@ interface GameResultProps {
   currentUsername?: string
   onPlayAgain: () => void
   onBackToMenu: () => void
+  isWaitingForRematch?: boolean
+  opponentWantsRematch?: boolean
 }
 
-export function GameResult({ result, currentUsername, onPlayAgain, onBackToMenu }: GameResultProps) {
+export function GameResult({ result, currentUsername, onPlayAgain, onBackToMenu, isWaitingForRematch, opponentWantsRematch }: GameResultProps) {
   const isPlayer1Winner = result.winner === result.player1.username
   const isPlayer2Winner = result.winner === result.player2.username
   const isDraw = !result.winner
@@ -102,10 +104,29 @@ export function GameResult({ result, currentUsername, onPlayAgain, onBackToMenu 
         </div>
       </div>
 
+      {/* Rematch waiting hint */}
+      {opponentWantsRematch && !isWaitingForRematch && (
+        <div className="text-center p-3 bg-primary/10 rounded-lg">
+          <p className="text-sm text-primary font-medium">🔔 对手想再来一局！点击【再来一局】开始新对战</p>
+        </div>
+      )}
+
       {/* Actions */}
       <div className="flex gap-3">
-        <Button variant="primary" className="flex-1" onClick={onPlayAgain}>
-          再来一局
+        <Button
+          variant="primary"
+          className="flex-1"
+          onClick={onPlayAgain}
+          disabled={isWaitingForRematch}
+        >
+          {isWaitingForRematch ? (
+            <span className="flex items-center justify-center gap-2">
+              <span className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full" />
+              等待对手确认...
+            </span>
+          ) : (
+            "再来一局"
+          )}
         </Button>
         <Button variant="outline" className="flex-1" onClick={onBackToMenu}>
           返回菜单

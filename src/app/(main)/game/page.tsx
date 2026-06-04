@@ -13,7 +13,7 @@ import { GameResult } from "@/components/game/GameResult"
 import { AlertDialog } from "@/components/ui/dialog"
 import { getSupabase } from "@/lib/supabase"
 import type { RealtimeChannel } from "@supabase/supabase-js"
-import type { GameMode, WordLevel, WordItem, GameResult as GameResultType } from "@/types"
+import type { GameMode, WordLevel, WordItem, QuestionType, GameResult as GameResultType } from "@/types"
 
 export default function GamePage() {
   const { user } = useAuthStore()
@@ -44,6 +44,13 @@ export default function GamePage() {
   const [isWaitingForOpponent, setIsWaitingForOpponent] = useState(false)
   const opponentFinishedRef = useRef(false)
   const selfFinishedRef = useRef(false)
+
+  // Rematch state
+  const [isWaitingForRematch, setIsWaitingForRematch] = useState(false)
+  const [opponentWantsRematch, setOpponentWantsRematch] = useState(false)
+  const rematchRequestedRef = useRef(false)
+  const opponentRematchRef = useRef(false)
+  const isHostRef = useRef(false)
 
   // Load words
   useEffect(() => {
@@ -236,6 +243,58 @@ export default function GamePage() {
     }, 1000)
   }, [mode, submitAnswer, nextQuestion, finishGame, handleGameEnd, user])
 
+  const resetAllRematchState = () => {
+    rematchRequestedRef.current = false
+    opponentRematchRef.current = false
+    setIsWaitingForRematch(false)
+    setOpponentWantsRematch(false)
+    opponentAnswersRef.current = {}
+    opponentCorrectCountRef.current = 0
+    setOpponentCorrectCount(0)
+    setIsWaitingForOpponent(false)
+    opponentFinishedRef.current = false
+    selfFinishedRef.current = false
+  }
+
+  const startRematch = () => {
+    console.log("[Rematch] Starting rematch, isHost:", isHostRef.current)
+    resetAllRematchState()
+
+    if (isHostRef.current) {
+      if (words.length < 10) {
+        console.error("[Rematch] Not enough words")
+        return
+      }
+      const shuffled = [...words].sort(() => Math.random() - 0.5)
+      const selectedWords = shuffled.slice(0, totalQuestions)
+      const presetQuestions = selectedWords.map((word, i) => {
+        const type: QuestionType = i % 3 === 2 ? "listening" : i % 2 === 0 ? "en2cn" : "cn2en"
+        const wrongOptions = words
+          .filter((w) => w.id !== word.id)
+          .sort(() => Math.random() - 0.5)
+          .slice(0, 3)
+          .map((w) => (type === "en2cn" || type === "listening" ? w.meaningCn : w.word))
+        const correctAnswer = type === "en2cn" || type === "listening" ? word.meaningCn : word.word
+        const options = [...new Set([...wrongOptions, correctAnswer])].sort(() => Math.random() - 0.5)
+        while (options.length < 4) options.push(`选项${options.length + 1}`)
+        return { id: `rq-${Date.now()}-${i}`, word, type, options, correctAnswer }
+      })
+
+      if (channelRef.current) {
+        channelRef.current.send({
+          type: "broadcast",
+          event: "game-started",
+          payload: { questions: presetQuestions, totalQuestions },
+        })
+      }
+
+      resetGame()
+      setResult(null)
+      setTimerKey((k) => k + 1)
+      initGame("realtime", selectedLevel, words, totalQuestions, presetQuestions)
+    }
+  }
+
   // Subscribe to realtime channel for multiplayer answer sync
   useEffect(() => {
     if (mode !== "realtime") return
@@ -268,6 +327,18 @@ export default function GamePage() {
     roomIdRef.current = roomId
     const channelName = `room:${roomId}`
     console.log("[Realtime] Creating channel:", channelName)
+
+    // Determine if current user is the host from stored room data
+    try {
+      const storedRoom = localStorage.getItem("currentRoom")
+      if (storedRoom) {
+        const room = JSON.parse(storedRoom)
+        isHostRef.current = room.hostId === user?.id
+        console.log("[Realtime] isHost:", isHostRef.current, "hostId:", room.hostId, "userId:", user?.id)
+      }
+    } catch {
+      // ignore parse errors
+    }
 
     // Configure channel to receive own broadcast events
     const channel = supabase.channel(channelName, {
@@ -328,6 +399,42 @@ export default function GamePage() {
         // Handle opponent ending the game
         if (payload.playerId !== currentUserId) {
           console.log("Opponent ended the game")
+        }
+      })
+      .on("broadcast", { event: "rematch-requested" }, ({ payload }) => {
+        console.log("[Realtime] Received rematch-requested from playerId:", payload.playerId, "currentUserId:", currentUserId)
+        if (payload.playerId !== currentUserId) {
+          opponentRematchRef.current = true
+          setOpponentWantsRematch(true)
+          // If self also requested rematch, start the new game
+          if (rematchRequestedRef.current) {
+            console.log("[Realtime] Both players want rematch, starting new game")
+            startRematch()
+          }
+        }
+      })
+      .on("broadcast", { event: "game-started" }, ({ payload }) => {
+        console.log("[Realtime] Received game-started (rematch), isHost:", isHostRef.current)
+        // Joiner receives new questions from host during rematch
+        if (!isHostRef.current && payload.questions) {
+          const { questions: presetQuestions, totalQuestions: total } = payload
+          resetAllRematchState()
+          resetGame()
+          setResult(null)
+          setTimerKey((k) => k + 1)
+          initGame("realtime", selectedLevel, words, total, presetQuestions)
+        }
+      })
+      .on("broadcast", { event: "player-left" }, ({ payload }) => {
+        console.log("[Realtime] Received player-left from playerId:", payload.playerId, "currentUserId:", currentUserId)
+        if (payload.playerId !== currentUserId) {
+          // Opponent left — cancel rematch waiting
+          if (rematchRequestedRef.current) {
+            rematchRequestedRef.current = false
+            opponentRematchRef.current = false
+            setIsWaitingForRematch(false)
+            setOpponentWantsRematch(false)
+          }
         }
       })
       .subscribe((status, err) => {
@@ -495,8 +602,28 @@ export default function GamePage() {
   }
 
   const playAgain = () => {
+    // For realtime mode, use rematch flow instead of navigating to lobby
+    if (mode === "realtime" && channelRef.current && user) {
+      rematchRequestedRef.current = true
+      setIsWaitingForRematch(true)
+
+      // Broadcast rematch request
+      channelRef.current.send({
+        type: "broadcast",
+        event: "rematch-requested",
+        payload: { playerId: user.id },
+      })
+
+      // If opponent already requested rematch, start now
+      if (opponentRematchRef.current) {
+        console.log("[Rematch] Opponent already requested, starting now")
+        startRematch()
+      }
+      return
+    }
+
+    // AI mode: start directly
     setResult(null)
-    // Reset realtime state
     opponentAnswersRef.current = {}
     opponentCorrectCountRef.current = 0
     setOpponentCorrectCount(0)
@@ -637,9 +764,20 @@ export default function GamePage() {
           currentUsername={user?.username}
           onPlayAgain={playAgain}
           onBackToMenu={() => {
+            // Notify opponent before leaving
+            if (mode === "realtime" && channelRef.current && user) {
+              channelRef.current.send({
+                type: "broadcast",
+                event: "player-left",
+                payload: { playerId: user.id },
+              })
+            }
+            resetAllRematchState()
             resetGame()
             setResult(null)
           }}
+          isWaitingForRematch={isWaitingForRematch}
+          opponentWantsRematch={opponentWantsRematch}
         />
       </div>
     )
