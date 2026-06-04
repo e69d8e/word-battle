@@ -73,7 +73,10 @@ export default function LobbyPage() {
     }
 
     const channel = supabase.channel(`room:${rid}`, {
-      config: { presence: { key: playerIdRef.current } },
+      config: {
+        presence: { key: playerIdRef.current },
+        broadcast: { self: true },
+      },
     })
 
     // Helper to update both state and ref
@@ -92,7 +95,10 @@ export default function LobbyPage() {
       })
       .on("broadcast", { event: "game-started" }, ({ payload }) => {
         initGame("realtime", selectedLevel, words, payload.totalQuestions, payload.questions)
-        router.push("/game")
+        // Save room ID and navigate with it
+        console.log("[Lobby] Received game-started, saving room ID:", rid)
+        localStorage.setItem("currentRoomId", rid)
+        router.push(`/game?roomId=${rid}`)
       })
       .on("broadcast", { event: "player-left" }, ({ payload }) => {
         updateRoom(payload.room)
@@ -231,6 +237,10 @@ export default function LobbyPage() {
   const handleStartGame = useCallback(async () => {
     if (!channelRef.current || !roomId || words.length < 10) return
 
+    // Store room ID for game page to use
+    console.log("[Lobby] Saving room ID to localStorage:", roomId)
+    localStorage.setItem("currentRoomId", roomId)
+
     // Select random questions
     const shuffled = [...words].sort(() => Math.random() - 0.5)
     const selectedWords = shuffled.slice(0, 10)
@@ -281,7 +291,8 @@ export default function LobbyPage() {
 
     // Also start locally
     initGame("realtime", selectedLevel, words, questions.length)
-    router.push("/game")
+    // Navigate to game with room ID in URL
+    router.push(`/game?roomId=${roomId}`)
   }, [roomId, words, initGame, router, selectedLevel])
 
   // Compute derived state outside of JSX to avoid ref access during render
