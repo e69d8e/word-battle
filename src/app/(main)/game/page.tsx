@@ -305,40 +305,23 @@ export default function GamePage() {
       return
     }
 
-    // Get room ID from URL params or store
+    // Get room ID and host flag from URL params
     const urlParams = new URLSearchParams(window.location.search)
-    const roomIdFromUrl = urlParams.get("roomId")
-    const roomIdFromStorage = localStorage.getItem("currentRoomId")
-    console.log("[Realtime] URL search:", window.location.search)
-    console.log("[Realtime] Room ID from URL:", roomIdFromUrl, "from storage:", roomIdFromStorage)
+    const roomId = urlParams.get("roomId")
+    const isHostParam = urlParams.get("isHost")
 
-    // Prefer URL param over storage
-    const roomId = roomIdFromUrl || roomIdFromStorage
+    console.log("[Realtime] URL search:", window.location.search)
+    console.log("[Realtime] Room ID:", roomId, "isHost:", isHostParam)
 
     if (!roomId) {
       console.error("[Realtime] No room ID found")
       return
     }
 
-    // Always save the room ID we're using to storage
-    console.log("[Realtime] Using room ID:", roomId)
-    localStorage.setItem("currentRoomId", roomId)
-
     roomIdRef.current = roomId
+    isHostRef.current = isHostParam === "true"
     const channelName = `room:${roomId}`
-    console.log("[Realtime] Creating channel:", channelName)
-
-    // Determine if current user is the host from stored room data
-    try {
-      const storedRoom = localStorage.getItem("currentRoom")
-      if (storedRoom) {
-        const room = JSON.parse(storedRoom)
-        isHostRef.current = room.hostId === user?.id
-        console.log("[Realtime] isHost:", isHostRef.current, "hostId:", room.hostId, "userId:", user?.id)
-      }
-    } catch {
-      // ignore parse errors
-    }
+    console.log("[Realtime] Creating channel:", channelName, "isHost:", isHostRef.current)
 
     // Configure channel to receive own broadcast events
     const channel = supabase.channel(channelName, {

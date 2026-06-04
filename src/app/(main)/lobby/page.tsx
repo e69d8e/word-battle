@@ -46,29 +46,10 @@ export default function LobbyPage() {
   const playerIdRef = useRef<string>(playerId)
   const roomRef = useRef<RoomState | null>(null)
 
-  // Restore room state from localStorage
-  const [roomId, setRoomId] = useState<string>(() => {
-    if (typeof window !== "undefined") return localStorage.getItem("lobbyRoomId") || ""
-    return ""
-  })
+  const [roomId, setRoomId] = useState("")
   const [joinRoomId, setJoinRoomId] = useState("")
-  const [room, setRoom] = useState<RoomState | null>(() => {
-    if (typeof window !== "undefined") {
-      try {
-        const saved = localStorage.getItem("lobbyRoom")
-        return saved ? JSON.parse(saved) : null
-      } catch { return null }
-    }
-    return null
-  })
-  const [status, setStatus] = useState<"idle" | "creating" | "joining" | "waiting" | "playing">(() => {
-    if (typeof window !== "undefined") {
-      const savedRoom = localStorage.getItem("lobbyRoom")
-      const savedLevel = localStorage.getItem("lobbyLevel")
-      if (savedRoom) return "waiting"
-    }
-    return "idle"
-  })
+  const [room, setRoom] = useState<RoomState | null>(null)
+  const [status, setStatus] = useState<"idle" | "creating" | "joining" | "waiting" | "playing">("idle")
   const [error, setError] = useState("")
   const [selectedLevel, setSelectedLevel] = useState<WordLevel>(() => {
     if (typeof window !== "undefined") {
@@ -89,17 +70,6 @@ export default function LobbyPage() {
   useEffect(() => {
     localStorage.setItem("lobbyLevel", selectedLevel)
   }, [selectedLevel])
-
-  // Persist room state to localStorage
-  useEffect(() => {
-    if (room && roomId) {
-      localStorage.setItem("lobbyRoom", JSON.stringify(room))
-      localStorage.setItem("lobbyRoomId", roomId)
-    } else {
-      localStorage.removeItem("lobbyRoom")
-      localStorage.removeItem("lobbyRoomId")
-    }
-  }, [room, roomId])
 
   // Redirect to login if not authenticated
   const [showLoginDialog, setShowLoginDialog] = useState(false)
@@ -168,9 +138,6 @@ export default function LobbyPage() {
           return
         }
         initGame("realtime", selectedLevel, wordsRef.current, payload.totalQuestions, payload.questions)
-        // Save room ID and navigate with it
-        console.log("[Lobby] Received game-started, saving room ID:", rid)
-        localStorage.setItem("currentRoomId", rid)
         router.push(`/game?roomId=${rid}`)
       })
       .on("broadcast", { event: "player-left" }, ({ payload }) => {
@@ -212,26 +179,6 @@ export default function LobbyPage() {
     channelRef.current = channel
     return channel
   }, [initGame, router, selectedLevel])
-
-  // Reconnect to channel when restoring room from localStorage
-  useEffect(() => {
-    if (roomId && room && !channelRef.current && user) {
-      const channel = subscribeToRoom(roomId)
-      channel.track({
-        id: playerIdRef.current,
-        username: user.username,
-        ready: room.players.find((p) => p.id === playerIdRef.current)?.ready ?? false,
-      })
-      // Request latest room state from host
-      setTimeout(() => {
-        channel.send({
-          type: "broadcast",
-          event: "request-state",
-          payload: { playerId: playerIdRef.current, username: user.username },
-        })
-      }, 500)
-    }
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleCreateRoom = useCallback(async () => {
     if (!user) return
@@ -330,10 +277,6 @@ export default function LobbyPage() {
   const handleStartGame = useCallback(async () => {
     if (!channelRef.current || !roomId || words.length < 10) return
 
-    // Store room ID for game page to use
-    console.log("[Lobby] Saving room ID to localStorage:", roomId)
-    localStorage.setItem("currentRoomId", roomId)
-
     // Select random questions
     const shuffled = [...words].sort(() => Math.random() - 0.5)
     const selectedWords = shuffled.slice(0, 10)
@@ -393,8 +336,8 @@ export default function LobbyPage() {
 
     // Also start locally with the same preset questions
     initGame("realtime", selectedLevel, words, questions.length, questions)
-    // Navigate to game with room ID in URL
-    router.push(`/game?roomId=${roomId}`)
+    // Navigate to game with room ID and host flag in URL
+    router.push(`/game?roomId=${roomId}&isHost=true`)
   }, [roomId, words, initGame, router, selectedLevel])
 
   // Compute derived state outside of JSX to avoid ref access during render
@@ -562,8 +505,6 @@ export default function LobbyPage() {
                     setRoom(null)
                     setRoomId("")
                     setStatus("idle")
-                    localStorage.removeItem("lobbyRoom")
-                    localStorage.removeItem("lobbyRoomId")
                   }}
                 >
                   离开房间
