@@ -158,6 +158,13 @@ npm run build
 npm run electron-build
 ```
 
+## 在线体验
+
+| 平台 | 地址 |
+|------|------|
+| Netlify | https://word-pk-li.netlify.app |
+| Vercel | https://word-battle-six.vercel.app |
+
 ## 部署
 
 ### Netlify（推荐）
