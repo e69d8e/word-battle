@@ -44,12 +44,17 @@ export function useSpeech() {
       utterance.voice = voiceRef.current
     }
 
-    // All calls are SYNCHRONOUS within the user gesture handler.
-    // This is critical for mobile browsers which require speak() to be
-    // called directly in the gesture callback (no setTimeout/async).
     synth.speak(utterance)
-    synth.pause()
-    synth.resume()
+
+    // Chrome desktop bug: speechSynthesis can get stuck in "speaking=true"
+    // state without producing audio. pause()+resume() forces it to start.
+    // Wrapped in try-catch as some mobile browsers may throw.
+    try {
+      synth.pause()
+      synth.resume()
+    } catch {
+      // ignore — mobile browsers may not support this
+    }
   }, [])
 
   const stop = useCallback(() => {
