@@ -61,7 +61,7 @@ model Game {
 model GameQuestion {
   id       String  @id @default(uuid())
   gameId   String
-  wordId   String
+  wordId   String?
   type     String
   options  String
   answer1  String?
@@ -71,7 +71,7 @@ model GameQuestion {
   time1    Int?
   time2    Int?
   game     Game    @relation(fields: [gameId], references: [id], onDelete: Cascade)
-  word     Word    @relation(fields: [wordId], references: [id])
+  word     Word?   @relation(fields: [wordId], references: [id])
 }
 
 model Score {

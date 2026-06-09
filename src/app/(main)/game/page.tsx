@@ -142,7 +142,6 @@ export default function GamePage() {
         score2: finalScore2,
         status: "finished",
         questions: finalQuestions.map((q) => ({
-          wordId: q.word.id,
           type: q.type,
           options: q.options,
           answer1: finalAnswers1[q.id]?.answer,

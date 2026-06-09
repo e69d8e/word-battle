@@ -1,21 +1,61 @@
 "use client"
 
-import { useCallback, useRef } from "react"
+import { useCallback, useEffect, useRef } from "react"
 
 export function useSpeech() {
-  const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null)
+  const voiceRef = useRef<SpeechSynthesisVoice | null>(null)
+
+  // Pre-load and select the best English voice on mount
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const synth = window.speechSynthesis
+
+    const pickVoice = () => {
+      const voices = synth.getVoices()
+      // Prefer a high-quality English voice
+      voiceRef.current =
+        voices.find((v) => v.lang === "en-US" && v.name.includes("Google")) ||
+        voices.find((v) => v.lang === "en-US" && v.localService === false) ||
+        voices.find((v) => v.lang === "en-US") ||
+        voices.find((v) => v.lang.startsWith("en")) ||
+        voices[0] ||
+        null
+    }
+
+    pickVoice()
+    if (synth.onvoiceschanged !== undefined) {
+      synth.onvoiceschanged = pickVoice
+    }
+  }, [])
 
   const speak = useCallback((text: string, lang = "en-US") => {
     if (typeof window === "undefined") return
-    window.speechSynthesis.cancel()
+    const synth = window.speechSynthesis
+
+    // Cancel any queued speech
+    synth.cancel()
 
     const utterance = new SpeechSynthesisUtterance(text)
     utterance.lang = lang
     utterance.rate = 0.9
     utterance.pitch = 1
-    utteranceRef.current = utterance
+    utterance.volume = 1
 
-    window.speechSynthesis.speak(utterance)
+    if (voiceRef.current) {
+      utterance.voice = voiceRef.current
+    }
+
+    synth.speak(utterance)
+
+    // Chrome bug: speechSynthesis can get stuck in "speaking=true" state
+    // without actually producing audio. pause() + resume() forces it to
+    // actually start processing the queued utterance.
+    setTimeout(() => {
+      if (synth.speaking && !synth.paused) {
+        synth.pause()
+        synth.resume()
+      }
+    }, 100)
   }, [])
 
   const stop = useCallback(() => {
