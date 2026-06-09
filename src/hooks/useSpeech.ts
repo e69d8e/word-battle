@@ -12,7 +12,6 @@ export function useSpeech() {
 
     const pickVoice = () => {
       const voices = synth.getVoices()
-      // Prefer a high-quality English voice
       voiceRef.current =
         voices.find((v) => v.lang === "en-US" && v.name.includes("Google")) ||
         voices.find((v) => v.lang === "en-US" && v.localService === false) ||
@@ -45,17 +44,12 @@ export function useSpeech() {
       utterance.voice = voiceRef.current
     }
 
+    // All calls are SYNCHRONOUS within the user gesture handler.
+    // This is critical for mobile browsers which require speak() to be
+    // called directly in the gesture callback (no setTimeout/async).
     synth.speak(utterance)
-
-    // Chrome bug: speechSynthesis can get stuck in "speaking=true" state
-    // without actually producing audio. pause() + resume() forces it to
-    // actually start processing the queued utterance.
-    setTimeout(() => {
-      if (synth.speaking && !synth.paused) {
-        synth.pause()
-        synth.resume()
-      }
-    }, 100)
+    synth.pause()
+    synth.resume()
   }, [])
 
   const stop = useCallback(() => {
