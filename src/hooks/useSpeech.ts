@@ -7,7 +7,7 @@ export function useSpeech() {
 
   // Pre-load and select the best English voice on mount
   useEffect(() => {
-    if (typeof window === "undefined") return
+    if (typeof window === "undefined" || !window.speechSynthesis) return
     const synth = window.speechSynthesis
 
     const pickVoice = () => {
@@ -28,7 +28,7 @@ export function useSpeech() {
   }, [])
 
   const speak = useCallback((text: string, lang = "en-US") => {
-    if (typeof window === "undefined") return
+    if (typeof window === "undefined" || !window.speechSynthesis) return
     const synth = window.speechSynthesis
 
     // Cancel any queued speech
@@ -58,7 +58,7 @@ export function useSpeech() {
   }, [])
 
   const stop = useCallback(() => {
-    if (typeof window === "undefined") return
+    if (typeof window === "undefined" || !window.speechSynthesis) return
     window.speechSynthesis.cancel()
   }, [])
 
