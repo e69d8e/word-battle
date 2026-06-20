@@ -1,5 +1,5 @@
 [build]
-  command = "npm run build"
+  command = "node scripts/download-audio.js && npm run build"
   publish = ".next"
 
 [[plugins]]
