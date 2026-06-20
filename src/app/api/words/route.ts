@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { prisma } from "@/lib/db"
 import cet4Data from "@/data/words/cet4.json"
 import cet6Data from "@/data/words/cet6.json"
 import toeflData from "@/data/words/toefl.json"
@@ -26,16 +27,59 @@ export async function GET(req: NextRequest) {
       )
     }
 
-    // Return words directly from in-memory JSON — no DB round-trip
+    let dbWordList = await prisma.wordList.findFirst({
+      where: { level },
+      include: { words: true },
+    })
+
+    if (!dbWordList || dbWordList.words.length === 0) {
+      console.log(`Word list for ${level} not found or empty in DB. Auto-seeding...`)
+      
+      if (dbWordList) {
+        await prisma.wordList.delete({ where: { id: dbWordList.id } })
+      }
+
+      const newWordList = await prisma.wordList.create({
+        data: {
+          name: wordData.name,
+          level,
+        },
+      })
+
+      await prisma.word.createMany({
+        data: wordData.data.map((w) => ({
+          word: w.word,
+          phonetic: w.phonetic || null,
+          meaning: w.meaning,
+          meaningCn: w.meaningCn,
+          example: w.example || null,
+          wordListId: newWordList.id,
+        })),
+      })
+
+      dbWordList = await prisma.wordList.findUnique({
+        where: { id: newWordList.id },
+        include: { words: true },
+      })
+    }
+
+    if (!dbWordList) {
+      throw new Error("Failed to load or seed word list")
+    }
+
     return NextResponse.json({
       wordList: {
-        name: wordData.name,
+        name: dbWordList.name,
         level,
-        wordCount: wordData.data.length,
+        wordCount: dbWordList.words.length,
       },
-      words: wordData.data.map((w, i) => ({
-        id: `${level}-${i}`,
-        ...w,
+      words: dbWordList.words.map((w) => ({
+        id: w.id,
+        word: w.word,
+        phonetic: w.phonetic,
+        meaning: w.meaning,
+        meaningCn: w.meaningCn,
+        example: w.example,
       })),
     })
   } catch (error) {

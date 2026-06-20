@@ -76,7 +76,8 @@ export default function LobbyPage() {
   const { isLoading } = useAuthStore()
   useEffect(() => {
     if (!isLoading && !user) {
-      setShowLoginDialog(true)
+      const timer = setTimeout(() => setShowLoginDialog(true), 0)
+      return () => clearTimeout(timer)
     }
   }, [user, isLoading])
 
@@ -137,8 +138,10 @@ export default function LobbyPage() {
           isHostRef.current = false
           return
         }
+        const currentRoom = roomRef.current || room
+        const opponent = currentRoom?.players.find((p) => p.id !== playerIdRef.current)?.username || ""
         initGame("realtime", selectedLevel, wordsRef.current, payload.totalQuestions, payload.questions)
-        router.push(`/game?roomId=${rid}`)
+        router.push(`/game?roomId=${rid}&opponent=${encodeURIComponent(opponent)}`)
       })
       .on("broadcast", { event: "player-left" }, ({ payload }) => {
         updateRoom(payload.room)
@@ -197,6 +200,18 @@ export default function LobbyPage() {
     setStatus("waiting")
 
     const channel = subscribeToRoom(newRoomId)
+
+    // Wait for subscription to be ready
+    await new Promise<void>((resolve) => {
+      const check = setInterval(() => {
+        if (channel.state === "joined") {
+          clearInterval(check)
+          resolve()
+        }
+      }, 100)
+      // Timeout after 3 seconds
+      setTimeout(() => { clearInterval(check); resolve() }, 3000)
+    })
 
     // Track presence
     await channel.track({
@@ -334,11 +349,12 @@ export default function LobbyPage() {
       payload: { questions, totalQuestions: questions.length },
     })
 
+    const opponent = room?.players.find((p) => p.id !== playerIdRef.current)?.username || ""
     // Also start locally with the same preset questions
     initGame("realtime", selectedLevel, words, questions.length, questions)
     // Navigate to game with room ID and host flag in URL
-    router.push(`/game?roomId=${roomId}&isHost=true`)
-  }, [roomId, words, initGame, router, selectedLevel])
+    router.push(`/game?roomId=${roomId}&isHost=true&opponent=${encodeURIComponent(opponent)}`)
+  }, [roomId, words, initGame, router, selectedLevel, room])
 
   // Compute derived state outside of JSX to avoid ref access during render
   const isCurrentUserReady = room?.players.find((p) => p.id === playerId)?.ready ?? false

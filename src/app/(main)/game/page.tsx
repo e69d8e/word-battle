@@ -19,7 +19,7 @@ export default function GamePage() {
   const { user } = useAuthStore()
   const {
     mode, status, questions, currentIndex,
-    score1, score2,
+    score1, score2, answers1,
     initGame, submitAnswer, nextQuestion, finishGame, resetGame
   } = useGameStore()
 
@@ -51,6 +51,20 @@ export default function GamePage() {
   const rematchRequestedRef = useRef(false)
   const opponentRematchRef = useRef(false)
   const isHostRef = useRef(false)
+
+  // Initialize opponent username from URL query param
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const urlParams = new URLSearchParams(window.location.search)
+      const opponentParam = urlParams.get("opponent")
+      if (opponentParam) {
+        const decodedOpponent = decodeURIComponent(opponentParam)
+        opponentUsernameRef.current = decodedOpponent
+        const timer = setTimeout(() => setOpponentUsername(decodedOpponent), 0)
+        return () => clearTimeout(timer)
+      }
+    }
+  }, [])
 
   // Load words
   useEffect(() => {
@@ -142,6 +156,7 @@ export default function GamePage() {
         score2: finalScore2,
         status: "finished",
         questions: finalQuestions.map((q) => ({
+          wordId: q.word.id,
           type: q.type,
           options: q.options,
           answer1: finalAnswers1[q.id]?.answer,
@@ -435,8 +450,11 @@ export default function GamePage() {
     }
   }, [mode, user?.id, finishGame, handleGameEnd])
 
+  const currentQuestion = questions[currentIndex]
+  const hasAnswered = currentQuestion ? !!answers1[currentQuestion.id] : false
+
   useEffect(() => {
-    if (status !== "playing") return
+    if (status !== "playing" || hasAnswered) return
 
     timeoutRef.current = false
     answeredRef.current = false
@@ -455,7 +473,7 @@ export default function GamePage() {
     }, 1000)
 
     return () => clearInterval(interval)
-  }, [currentIndex, status, timerKey])
+  }, [currentIndex, status, timerKey, hasAnswered])
 
   // Handle timeout separately to avoid setState during render
   useEffect(() => {
@@ -772,11 +790,9 @@ export default function GamePage() {
   }
 
   // Game playing screen
-  const currentQuestion = questions[currentIndex]
   if (!currentQuestion) return null
 
   // Calculate player1 correct count from store
-  const answers1 = useGameStore.getState().answers1
   const answers2 = useGameStore.getState().answers2
   const player1CorrectCount = Object.values(answers1).filter((a) => a.correct).length
   const player2CorrectCount = mode === "realtime"
