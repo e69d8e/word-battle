@@ -33,8 +33,8 @@ wordFiles.forEach((file) => {
 console.log(`Found ${words.size} unique words across all vocabulary lists.`)
 
 const wordArray = Array.from(words)
-const CONCURRENCY = 10 // Max concurrent downloads
-const BATCH_DELAY = 100 // Delay between downloads in ms
+const CONCURRENCY = 30 // Max concurrent downloads
+const BATCH_DELAY = 5 // Delay between downloads in ms
 
 function downloadWord(word) {
   return new Promise((resolve) => {
