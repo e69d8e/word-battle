@@ -1,65 +1,48 @@
 "use client"
 
-import { useCallback, useEffect, useRef } from "react"
+import { useCallback, useRef } from "react"
 
 export function useSpeech() {
-  const voiceRef = useRef<SpeechSynthesisVoice | null>(null)
+  const audioRef = useRef<HTMLAudioElement | null>(null)
 
-  // Pre-load and select the best English voice on mount
-  useEffect(() => {
-    if (typeof window === "undefined" || !window.speechSynthesis) return
-    const synth = window.speechSynthesis
+  const speak = useCallback((text: string) => {
+    if (typeof window === "undefined") return
 
-    const pickVoice = () => {
-      const voices = synth.getVoices()
-      voiceRef.current =
-        voices.find((v) => v.lang === "en-US" && v.name.includes("Google")) ||
-        voices.find((v) => v.lang === "en-US" && v.localService === false) ||
-        voices.find((v) => v.lang === "en-US") ||
-        voices.find((v) => v.lang.startsWith("en")) ||
-        voices[0] ||
-        null
+    const cleanText = text.toLowerCase().trim()
+    const localUrl = `/audio/${cleanText}.mp3`
+    const fallbackUrl = `https://dict.youdao.com/dictvoice?audio=${encodeURIComponent(cleanText)}&type=2`
+
+    if (!audioRef.current) {
+      audioRef.current = new Audio()
     }
 
-    pickVoice()
-    if (synth.onvoiceschanged !== undefined) {
-      synth.onvoiceschanged = pickVoice
-    }
-  }, [])
+    // Stop current audio if playing
+    audioRef.current.pause()
+    audioRef.current.currentTime = 0
 
-  const speak = useCallback((text: string, lang = "en-US") => {
-    if (typeof window === "undefined" || !window.speechSynthesis) return
-    const synth = window.speechSynthesis
+    // Try playing local audio file first
+    audioRef.current.src = localUrl
 
-    // Cancel any queued speech
-    synth.cancel()
-
-    const utterance = new SpeechSynthesisUtterance(text)
-    utterance.lang = lang
-    utterance.rate = 0.9
-    utterance.pitch = 1
-    utterance.volume = 1
-
-    if (voiceRef.current) {
-      utterance.voice = voiceRef.current
-    }
-
-    synth.speak(utterance)
-
-    // Chrome desktop bug: speechSynthesis can get stuck in "speaking=true"
-    // state without producing audio. pause()+resume() forces it to start.
-    // Wrapped in try-catch as some mobile browsers may throw.
-    try {
-      synth.pause()
-      synth.resume()
-    } catch {
-      // ignore — mobile browsers may not support this
+    const playPromise = audioRef.current.play()
+    if (playPromise !== undefined) {
+      playPromise.catch(() => {
+        // If local file is missing, try online fallback URL
+        console.log(`Local audio for "${cleanText}" not found. Trying online fallback...`)
+        if (audioRef.current) {
+          audioRef.current.src = fallbackUrl
+          audioRef.current.play().catch((fallbackErr) => {
+            console.warn("Pronunciation playback failed both locally and online:", fallbackErr)
+          })
+        }
+      })
     }
   }, [])
 
   const stop = useCallback(() => {
-    if (typeof window === "undefined" || !window.speechSynthesis) return
-    window.speechSynthesis.cancel()
+    if (audioRef.current) {
+      audioRef.current.pause()
+      audioRef.current.currentTime = 0
+    }
   }, [])
 
   return { speak, stop }
