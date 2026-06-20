@@ -112,6 +112,7 @@ async function run() {
   console.log(`Successfully downloaded/verified: ${completedCount - failedCount}`)
   console.log(`Skipped (already exists): ${skippedCount}`)
   console.log(`Failed: ${failedCount}`)
+  process.exit(0)
 }
 
 run()
