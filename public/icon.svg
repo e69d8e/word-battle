@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#d9896e"/>
+      <stop offset="100%" stop-color="#a9583e"/>
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="130%">
+      <feDropShadow dx="0" dy="4" stdDeviation="8" flood-color="#000" flood-opacity="0.15"/>
+    </filter>
+  </defs>
+
+  <!-- Rounded square background -->
+  <rect x="16" y="16" width="480" height="480" rx="96" ry="96" fill="url(#bg)"/>
+
+  <!-- Subtle inner highlight -->
+  <rect x="16" y="16" width="480" height="240" rx="96" ry="96" fill="#fff" opacity="0.06"/>
+
+  <!-- Letter W -->
+  <text x="256" y="290" text-anchor="middle" dominant-baseline="central"
+        font-family="Georgia, 'Times New Roman', serif" font-weight="700" font-size="280"
+        fill="#fff" filter="url(#shadow)">W</text>
+
+  <!-- Crossed swords below W -->
+  <g transform="translate(256, 400)" stroke="#fff" stroke-width="5" stroke-linecap="round" fill="none" opacity="0.85">
+    <!-- Left sword -->
+    <line x1="-40" y1="-18" x2="40" y2="18"/>
+    <line x1="-40" y1="-18" x2="-32" y2="-26"/>
+    <line x1="-40" y1="-18" x2="-48" y2="-10"/>
+    <!-- Guard left -->
+    <line x1="-28" y1="-12" x2="-20" y2="-20"/>
+    <!-- Right sword -->
+    <line x1="40" y1="-18" x2="-40" y2="18"/>
+    <line x1="40" y1="-18" x2="48" y2="-26"/>
+    <line x1="40" y1="-18" x2="32" y2="-10"/>
+    <!-- Guard right -->
+    <line x1="28" y1="-12" x2="20" y2="-20"/>
+    <!-- Center clash sparkle -->
+    <circle cx="0" cy="0" r="6" fill="#fff" stroke="none"/>
+  </g>
+</svg>

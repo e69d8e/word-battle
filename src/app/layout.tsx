@@ -18,6 +18,13 @@ const cormorant = Cormorant_Garamond({
 export const metadata: Metadata = {
   title: "Word Battle - 英语单词PK",
   description: "与朋友一起PK英语单词，提升词汇量",
+  icons: {
+    icon: [
+      { url: "/favicon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icon.png", sizes: "1024x1024", type: "image/png" },
+    ],
+    apple: "/favicon-192.png",
+  },
 }
 
 export default function RootLayout({
