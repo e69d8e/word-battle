@@ -34,6 +34,7 @@ export default function LobbyPage() {
   const { initGame } = useGameStore()
 
   const channelRef = useRef<RealtimeChannel | null>(null)
+  const joinTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Restore playerId from localStorage to survive page navigation
   const [playerId] = useState<string>(() => {
@@ -83,9 +84,10 @@ export default function LobbyPage() {
     }
   }, [user, isLoading])
 
-  // Cleanup channel on unmount
+  // Cleanup channel and timers on unmount
   useEffect(() => {
     return () => {
+      if (joinTimeoutRef.current) clearTimeout(joinTimeoutRef.current)
       const supabase = getSupabase()
       if (channelRef.current && supabase) {
         supabase.removeChannel(channelRef.current)
@@ -114,6 +116,11 @@ export default function LobbyPage() {
 
     channel
       .on("broadcast", { event: "room-update" }, ({ payload }) => {
+        // Host responded — room exists, cancel the join timeout
+        if (joinTimeoutRef.current) {
+          clearTimeout(joinTimeoutRef.current)
+          joinTimeoutRef.current = null
+        }
         updateRoom(payload.room)
       })
       .on("broadcast", { event: "game-start" }, ({ payload }) => {
@@ -253,6 +260,21 @@ export default function LobbyPage() {
 
     setStatus("waiting")
     setError("")
+
+    // If no host responds within 5 seconds, the room doesn't exist
+    joinTimeoutRef.current = setTimeout(() => {
+      joinTimeoutRef.current = null
+      setError("房间不存在，请检查房间号是否正确")
+      setStatus("idle")
+      // Clean up the channel
+      if (channelRef.current) {
+        const supabase = getSupabase()
+        if (supabase) supabase.removeChannel(channelRef.current)
+        channelRef.current = null
+      }
+      setRoom(null)
+      setRoomId("")
+    }, 5000)
   }, [user, joinRoomId, subscribeToRoom])
 
   const handleReady = useCallback(async () => {
@@ -457,6 +479,10 @@ export default function LobbyPage() {
                   variant="outline"
                   className="flex-1"
                   onClick={() => {
+                    if (joinTimeoutRef.current) {
+                      clearTimeout(joinTimeoutRef.current)
+                      joinTimeoutRef.current = null
+                    }
                     if (channelRef.current) {
                       const supabase = getSupabase()
                       if (supabase) supabase.removeChannel(channelRef.current)
