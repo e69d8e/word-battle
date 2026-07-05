@@ -1,5 +1,6 @@
-import { NextRequest, NextResponse } from "next/server"
+import { NextRequest } from "next/server"
 import { prisma } from "@/lib/db"
+import { apiError, apiSuccess } from "@/lib/api"
 
 export async function GET(req: NextRequest) {
   try {
@@ -7,35 +8,21 @@ export async function GET(req: NextRequest) {
     const userId = searchParams.get("id")
 
     if (!userId) {
-      return NextResponse.json(
-        { error: "缺少用户ID" },
-        { status: 400 }
-      )
+      return apiError("缺少用户ID", 400)
     }
 
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      select: {
-        id: true,
-        username: true,
-        avatar: true,
-        createdAt: true,
-      },
+      select: { id: true, username: true, avatar: true, createdAt: true },
     })
 
     if (!user) {
-      return NextResponse.json(
-        { error: "用户不存在" },
-        { status: 404 }
-      )
+      return apiError("用户不存在", 404)
     }
 
-    return NextResponse.json({ user })
+    return apiSuccess({ user })
   } catch (error) {
     console.error("Get user error:", error)
-    return NextResponse.json(
-      { error: "获取用户信息失败" },
-      { status: 500 }
-    )
+    return apiError("获取用户信息失败")
   }
 }

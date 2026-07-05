@@ -10,21 +10,27 @@ interface AuthStore {
   checkAuth: () => Promise<void>
 }
 
+async function authRequest(url: string, body: object): Promise<User | null> {
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) return null
+  const data = await res.json()
+  return data.user
+}
+
 export const useAuthStore = create<AuthStore>((set) => ({
   user: null,
   isLoading: true,
 
   login: async (username, password) => {
     try {
-      const res = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password }),
-      })
-      if (res.ok) {
-        const data = await res.json()
-        set({ user: data.user })
-        localStorage.setItem("userId", data.user.id)
+      const user = await authRequest("/api/auth/login", { username, password })
+      if (user) {
+        set({ user })
+        localStorage.setItem("userId", user.id)
         return true
       }
       return false
@@ -35,15 +41,10 @@ export const useAuthStore = create<AuthStore>((set) => ({
 
   register: async (username, password) => {
     try {
-      const res = await fetch("/api/auth/register", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password }),
-      })
-      if (res.ok) {
-        const data = await res.json()
-        set({ user: data.user })
-        localStorage.setItem("userId", data.user.id)
+      const user = await authRequest("/api/auth/register", { username, password })
+      if (user) {
+        set({ user })
+        localStorage.setItem("userId", user.id)
         return true
       }
       return false

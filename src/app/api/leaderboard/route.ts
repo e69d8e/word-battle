@@ -1,5 +1,6 @@
-import { NextRequest, NextResponse } from "next/server"
+import { NextRequest } from "next/server"
 import { prisma } from "@/lib/db"
+import { apiError, apiSuccess } from "@/lib/api"
 
 export async function GET(req: NextRequest) {
   try {
@@ -15,14 +16,8 @@ export async function GET(req: NextRequest) {
     const scores = await prisma.score.groupBy({
       by: ["userId"],
       where,
-      _max: {
-        score: true,
-      },
-      orderBy: {
-        _max: {
-          score: "desc",
-        },
-      },
+      _max: { score: true },
+      orderBy: { _max: { score: "desc" } },
       take: limit,
     })
 
@@ -41,12 +36,9 @@ export async function GET(req: NextRequest) {
       score: s._max.score,
     }))
 
-    return NextResponse.json({ leaderboard })
+    return apiSuccess({ leaderboard })
   } catch (error) {
     console.error("Get leaderboard error:", error)
-    return NextResponse.json(
-      { error: "获取排行榜失败" },
-      { status: 500 }
-    )
+    return apiError("获取排行榜失败")
   }
 }

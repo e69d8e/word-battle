@@ -1,5 +1,6 @@
-import { NextRequest, NextResponse } from "next/server"
+import { NextRequest } from "next/server"
 import { prisma } from "@/lib/db"
+import { apiError, apiSuccess } from "@/lib/api"
 
 const VALID_MODES = ["ai", "realtime", "async"]
 const VALID_LEVELS = ["CET4", "CET6", "TOEFL", "IELTS"]
@@ -10,24 +11,15 @@ export async function POST(req: NextRequest) {
     const { mode, wordLevel, player1Id, player2Id, score1, score2, questions, status } = body
 
     if (!player1Id) {
-      return NextResponse.json(
-        { error: "缺少玩家信息" },
-        { status: 400 }
-      )
+      return apiError("缺少玩家信息", 400)
     }
 
     if (mode && !VALID_MODES.includes(mode)) {
-      return NextResponse.json(
-        { error: "无效的游戏模式" },
-        { status: 400 }
-      )
+      return apiError("无效的游戏模式", 400)
     }
 
     if (wordLevel && !VALID_LEVELS.includes(wordLevel)) {
-      return NextResponse.json(
-        { error: "无效的词汇级别" },
-        { status: 400 }
-      )
+      return apiError("无效的词汇级别", 400)
     }
 
     const winnerId = score1 > score2 ? player1Id : score2 > score1 ? player2Id : null
@@ -66,33 +58,18 @@ export async function POST(req: NextRequest) {
     if (status === "finished" || !status) {
       await prisma.score.createMany({
         data: [
-          {
-            userId: player1Id,
-            mode,
-            level: wordLevel,
-            score: score1,
-          },
+          { userId: player1Id, mode, level: wordLevel, score: score1 },
           ...(player2Id
-            ? [
-                {
-                  userId: player2Id,
-                  mode,
-                  level: wordLevel,
-                  score: score2,
-                },
-              ]
+            ? [{ userId: player2Id, mode, level: wordLevel, score: score2 }]
             : []),
         ],
       })
     }
 
-    return NextResponse.json({ game })
+    return apiSuccess({ game })
   } catch (error) {
     console.error("Save game error:", error)
-    return NextResponse.json(
-      { error: "保存游戏失败" },
-      { status: 500 }
-    )
+    return apiError("保存游戏失败")
   }
 }
 
@@ -122,12 +99,9 @@ export async function GET(req: NextRequest) {
       take: limit,
     })
 
-    return NextResponse.json({ games })
+    return apiSuccess({ games })
   } catch (error) {
     console.error("Get games error:", error)
-    return NextResponse.json(
-      { error: "获取游戏记录失败" },
-      { status: 500 }
-    )
+    return apiError("获取游戏记录失败")
   }
 }

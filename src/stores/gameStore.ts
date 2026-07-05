@@ -1,6 +1,6 @@
 import { create } from "zustand"
-import type { GameState, GameMode, WordLevel, Question, QuestionType } from "@/types"
-import { shuffleArray, getRandomItems } from "@/lib/utils"
+import type { GameState, GameMode, WordLevel, Question } from "@/types"
+import { generateQuestions } from "@/lib/questions"
 import type { WordItem } from "@/types"
 
 interface GameStore extends GameState {
@@ -12,53 +12,6 @@ interface GameStore extends GameState {
   resetGame: () => void
   setGameStatus: (status: GameState["status"]) => void
   updateScore: (player: 1 | 2, score: number) => void
-}
-
-function generateQuestion(word: WordItem, allWords: WordItem[]): Question {
-  const types: QuestionType[] = ["en2cn", "cn2en", "listening"]
-  const type = types[Math.floor(Math.random() * types.length)]
-
-  let correctAnswer: string
-  let options: string[]
-
-  if (type === "en2cn") {
-    correctAnswer = word.meaningCn
-    const otherMeanings = [...new Set(
-      allWords.filter((w) => w.id !== word.id).map((w) => w.meaningCn)
-    )]
-    options = [correctAnswer, ...getRandomItems(otherMeanings, 3)]
-  } else if (type === "cn2en") {
-    correctAnswer = word.word
-    const otherWords = [...new Set(
-      allWords.filter((w) => w.id !== word.id).map((w) => w.word)
-    )]
-    options = [correctAnswer, ...getRandomItems(otherWords, 3)]
-  } else {
-    // listening
-    correctAnswer = word.word
-    const otherWords = [...new Set(
-      allWords.filter((w) => w.id !== word.id).map((w) => w.word)
-    )]
-    options = [correctAnswer, ...getRandomItems(otherWords, 3)]
-  }
-
-  // Deduplicate options (correct answer may appear in distractors if meanings overlap)
-  options = [...new Set(options)]
-
-  // Ensure minimum 4 options (pad with placeholders if word pool is too small)
-  while (options.length < 4) {
-    options.push(`选项${options.length + 1}`)
-  }
-
-  options = shuffleArray(options)
-
-  return {
-    id: word.id + "-" + type,
-    word,
-    type,
-    options,
-    correctAnswer,
-  }
 }
 
 export const useGameStore = create<GameStore>((set, get) => ({
@@ -75,7 +28,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   questionStartTime: 0,
 
   initGame: (mode, wordLevel, words, totalQ = 10, presetQuestions) => {
-    const questions = presetQuestions ?? getRandomItems(words, totalQ).map((w) => generateQuestion(w, words))
+    const questions = presetQuestions ?? generateQuestions(words, totalQ)
 
     set({
       mode,

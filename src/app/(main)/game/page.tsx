@@ -13,7 +13,9 @@ import { GameResult } from "@/components/game/GameResult"
 import { AlertDialog } from "@/components/ui/dialog"
 import { getSupabase } from "@/lib/supabase"
 import type { RealtimeChannel } from "@supabase/supabase-js"
-import type { GameMode, WordLevel, WordItem, QuestionType, GameResult as GameResultType } from "@/types"
+import { generateQuestions } from "@/lib/questions"
+import { useWords } from "@/hooks/useWords"
+import type { GameMode, WordLevel, GameResult as GameResultType } from "@/types"
 
 export default function GamePage() {
   const { user } = useAuthStore()
@@ -23,10 +25,9 @@ export default function GamePage() {
     initGame, submitAnswer, nextQuestion, finishGame, resetGame
   } = useGameStore()
 
-  const [words, setWords] = useState<WordItem[]>([])
-  const [isLoading, setIsLoading] = useState(false)
   const [selectedMode, setSelectedMode] = useState<GameMode>("ai")
   const [selectedLevel, setSelectedLevel] = useState<WordLevel>("CET4")
+  const { words, isLoading } = useWords(selectedLevel)
   const [totalQuestions] = useState(10)
   const [timerKey, setTimerKey] = useState(0)
   const [result, setResult] = useState<GameResultType | null>(null)
@@ -66,28 +67,25 @@ export default function GamePage() {
     }
   }, [])
 
-  // Load words
-  useEffect(() => {
-    async function loadWords() {
-      setIsLoading(true)
-      try {
-        const res = await fetch(`/api/words?level=${selectedLevel}`)
-        const data = await res.json()
-        setWords(data.words || [])
-      } catch (err) {
-        console.error("Failed to load words:", err)
-      } finally {
-        setIsLoading(false)
-      }
-    }
-    loadWords()
-  }, [selectedLevel])
-
   // Timer for each question
   const [timeLeft, setTimeLeft] = useState(15)
   const questionTimeLimit = 15
   const timeoutRef = useRef(false)
   const answeredRef = useRef(false) // Track if current question has been answered
+
+  // AI answer helper — used by both handleTimeout and handleAnswer
+  const getAIAnswer = useCallback(() => {
+    const state = useGameStore.getState()
+    const q = state.questions[state.currentIndex]
+    if (!q) return
+    const aiCorrect = Math.random() > 0.3
+    const wrongOptions = q.options.filter((o) => o !== q.correctAnswer)
+    const aiAnswer = aiCorrect
+      ? q.correctAnswer
+      : wrongOptions[Math.floor(Math.random() * wrongOptions.length)]
+    const aiTime = (Math.random() * 8 + 2) * 1000
+    submitAnswer(2, aiAnswer || "", aiTime)
+  }, [submitAnswer])
 
   const handleGameEnd = useCallback(() => {
     // Read all state from store to avoid stale closures
@@ -178,19 +176,46 @@ export default function GamePage() {
     })
   }, [user])
 
+  // Advance game: next question or finish — shared by handleTimeout and handleAnswer
+  const advanceGame = useCallback((delay: number) => {
+    setTimeout(() => {
+      const state = useGameStore.getState()
+      if (state.currentIndex < state.questions.length - 1) {
+        nextQuestion()
+        setTimerKey((k) => k + 1)
+      } else if (mode === "realtime") {
+        selfFinishedRef.current = true
+        if (channelRef.current && user) {
+          channelRef.current.send({
+            type: "broadcast",
+            event: "player-finished",
+            payload: { playerId: user.id, username: user.username },
+          })
+        }
+        if (opponentFinishedRef.current) {
+          setIsWaitingForOpponent(false)
+          finishGame()
+          handleGameEnd()
+        } else {
+          setIsWaitingForOpponent(true)
+        }
+      } else {
+        finishGame()
+        handleGameEnd()
+      }
+    }, delay)
+  }, [mode, nextQuestion, finishGame, handleGameEnd, user])
+
   const handleTimeout = useCallback(() => {
-    // Skip if already answered
     if (answeredRef.current) return
     answeredRef.current = true
 
-    // Auto submit empty answer on timeout
     submitAnswer(1, "", questionTimeLimit * 1000)
 
     // Broadcast timeout answer in realtime mode
     if (mode === "realtime" && channelRef.current && user) {
       const state = useGameStore.getState()
       const q = state.questions[state.currentIndex]
-      console.log("[Timeout] Sending answer-submitted (timeout), playerId:", user.id)
       channelRef.current.send({
         type: "broadcast",
         event: "answer-submitted",
@@ -206,56 +231,10 @@ export default function GamePage() {
       })
     }
 
-    if (mode === "ai") {
-      // AI answers
-      const state = useGameStore.getState()
-      const q = state.questions[state.currentIndex]
-      const aiCorrect = Math.random() > 0.3
-      const wrongOptions = q?.options.filter((o) => o !== q.correctAnswer) || []
-      const aiAnswer = aiCorrect
-        ? q?.correctAnswer
-        : wrongOptions[Math.floor(Math.random() * wrongOptions.length)]
-      submitAnswer(2, aiAnswer || "", (Math.random() * 5 + 3) * 1000)
-    }
+    if (mode === "ai") getAIAnswer()
 
-    // Move to next question or finish after a delay
-    setTimeout(() => {
-      const state = useGameStore.getState()
-      if (state.currentIndex < state.questions.length - 1) {
-        nextQuestion()
-        setTimerKey((k) => k + 1)
-      } else {
-        // In realtime mode, wait for opponent to finish
-        if (mode === "realtime") {
-          selfFinishedRef.current = true
-          console.log("[Timeout] Self finished, opponentFinished:", opponentFinishedRef.current)
-          // Notify opponent that we finished
-          if (channelRef.current && user) {
-            console.log("[Timeout] Sending player-finished event")
-            channelRef.current.send({
-              type: "broadcast",
-              event: "player-finished",
-              payload: { playerId: user.id, username: user.username },
-            })
-          }
-          // If opponent already finished, end game now
-          if (opponentFinishedRef.current) {
-            console.log("[Timeout] Both finished, ending game now")
-            setIsWaitingForOpponent(false)
-            finishGame()
-            handleGameEnd()
-          } else {
-            // Show waiting state
-            console.log("[Timeout] Showing waiting state")
-            setIsWaitingForOpponent(true)
-          }
-        } else {
-          finishGame()
-          handleGameEnd()
-        }
-      }
-    }, 1000)
-  }, [mode, submitAnswer, nextQuestion, finishGame, handleGameEnd, user])
+    advanceGame(1000)
+  }, [mode, submitAnswer, getAIAnswer, advanceGame, user])
 
   const resetAllRematchState = () => {
     rematchRequestedRef.current = false
@@ -279,20 +258,7 @@ export default function GamePage() {
         console.error("[Rematch] Not enough words")
         return
       }
-      const shuffled = [...words].sort(() => Math.random() - 0.5)
-      const selectedWords = shuffled.slice(0, totalQuestions)
-      const presetQuestions = selectedWords.map((word, i) => {
-        const type: QuestionType = i % 3 === 2 ? "listening" : i % 2 === 0 ? "en2cn" : "cn2en"
-        const wrongOptions = words
-          .filter((w) => w.id !== word.id)
-          .sort(() => Math.random() - 0.5)
-          .slice(0, 3)
-          .map((w) => (type === "en2cn" || type === "listening" ? w.meaningCn : w.word))
-        const correctAnswer = type === "en2cn" || type === "listening" ? word.meaningCn : word.word
-        const options = [...new Set([...wrongOptions, correctAnswer])].sort(() => Math.random() - 0.5)
-        while (options.length < 4) options.push(`选项${options.length + 1}`)
-        return { id: `rq-${Date.now()}-${i}`, word, type, options, correctAnswer }
-      })
+      const presetQuestions = generateQuestions(words, totalQuestions)
 
       if (channelRef.current) {
         channelRef.current.send({
@@ -485,7 +451,6 @@ export default function GamePage() {
 
   const handleAnswer = useCallback(
     (answer: string, timeMs: number) => {
-      // Skip if already answered (e.g., timeout fired first)
       if (answeredRef.current) return
       answeredRef.current = true
 
@@ -499,7 +464,6 @@ export default function GamePage() {
         const timeBonus = isCorrect ? Math.max(0, Math.floor((15000 - timeMs) / 100)) : 0
         const totalScore = baseScore + timeBonus
 
-        console.log("[Game] Sending answer-submitted, playerId:", user.id, "isCorrect:", isCorrect)
         channelRef.current.send({
           type: "broadcast",
           event: "answer-submitted",
@@ -516,59 +480,12 @@ export default function GamePage() {
       }
 
       if (mode === "ai") {
-        // AI answers after a delay
-        setTimeout(() => {
-          const state = useGameStore.getState()
-          const q = state.questions[state.currentIndex]
-          const aiCorrect = Math.random() > 0.3
-          const wrongOptions = q?.options.filter((o) => o !== q.correctAnswer) || []
-          const aiAnswer = aiCorrect
-            ? q?.correctAnswer
-            : wrongOptions[Math.floor(Math.random() * wrongOptions.length)]
-          const aiTime = (Math.random() * 8 + 2) * 1000
-          submitAnswer(2, aiAnswer || "", aiTime)
-        }, 500)
+        setTimeout(() => getAIAnswer(), 500)
       }
 
-      // Move to next question after a delay
-      setTimeout(() => {
-        const state = useGameStore.getState()
-        if (state.currentIndex < state.questions.length - 1) {
-          nextQuestion()
-          setTimerKey((k) => k + 1)
-        } else {
-          // In realtime mode, wait for opponent to finish
-          if (mode === "realtime") {
-            selfFinishedRef.current = true
-            console.log("[Game] Self finished, opponentFinished:", opponentFinishedRef.current)
-            // Notify opponent that we finished
-            if (channelRef.current && user) {
-              console.log("[Game] Sending player-finished event")
-              channelRef.current.send({
-                type: "broadcast",
-                event: "player-finished",
-                payload: { playerId: user.id, username: user.username },
-              })
-            }
-            // If opponent already finished, end game now
-            if (opponentFinishedRef.current) {
-              console.log("[Game] Both finished, ending game now")
-              setIsWaitingForOpponent(false)
-              finishGame()
-              handleGameEnd()
-            } else {
-              // Show waiting state
-              console.log("[Game] Showing waiting state")
-              setIsWaitingForOpponent(true)
-            }
-          } else {
-            finishGame()
-            handleGameEnd()
-          }
-        }
-      }, 1500)
+      advanceGame(1500)
     },
-    [mode, submitAnswer, nextQuestion, finishGame, handleGameEnd, user]
+    [mode, submitAnswer, getAIAnswer, advanceGame, user]
   )
 
   const startGame = () => {
@@ -577,7 +494,6 @@ export default function GamePage() {
         setShowLoginDialog(true)
         return
       }
-      // Navigate to lobby for realtime mode
       window.location.href = "/lobby"
       return
     }
@@ -586,18 +502,12 @@ export default function GamePage() {
       setShowLoadingDialog(true)
       return
     }
+    resetAllRematchState()
+    opponentUsernameRef.current = ""
+    setOpponentUsername("")
     resetGame()
     setResult(null)
     setTimerKey((k) => k + 1)
-    // Reset realtime state
-    opponentAnswersRef.current = {}
-    opponentCorrectCountRef.current = 0
-    setOpponentCorrectCount(0)
-    opponentUsernameRef.current = ""
-    setOpponentUsername("")
-    setIsWaitingForOpponent(false)
-    opponentFinishedRef.current = false
-    selfFinishedRef.current = false
     initGame(selectedMode, selectedLevel, words, totalQuestions)
   }
 
@@ -607,16 +517,13 @@ export default function GamePage() {
       rematchRequestedRef.current = true
       setIsWaitingForRematch(true)
 
-      // Broadcast rematch request
       channelRef.current.send({
         type: "broadcast",
         event: "rematch-requested",
         payload: { playerId: user.id },
       })
 
-      // If opponent already requested rematch, start now
       if (opponentRematchRef.current) {
-        console.log("[Rematch] Opponent already requested, starting now")
         startRematch()
       }
       return
@@ -624,14 +531,6 @@ export default function GamePage() {
 
     // AI mode: start directly
     setResult(null)
-    opponentAnswersRef.current = {}
-    opponentCorrectCountRef.current = 0
-    setOpponentCorrectCount(0)
-    opponentUsernameRef.current = ""
-    setOpponentUsername("")
-    setIsWaitingForOpponent(false)
-    opponentFinishedRef.current = false
-    selfFinishedRef.current = false
     startGame()
   }
 

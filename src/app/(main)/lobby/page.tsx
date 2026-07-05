@@ -11,7 +11,9 @@ import { useAuthStore } from "@/stores/authStore"
 import { useGameStore } from "@/stores/gameStore"
 import { getSupabase } from "@/lib/supabase"
 import type { RealtimeChannel } from "@supabase/supabase-js"
-import type { WordLevel, WordItem, Question, QuestionType } from "@/types"
+import { generateQuestions } from "@/lib/questions"
+import { useWords } from "@/hooks/useWords"
+import type { WordLevel, Question } from "@/types"
 
 interface Player {
   id: string
@@ -57,8 +59,8 @@ export default function LobbyPage() {
     }
     return "CET4"
   })
-  const [words, setWords] = useState<WordItem[]>([])
-  const wordsRef = useRef<WordItem[]>([])
+  const { words } = useWords(selectedLevel)
+  const wordsRef = useRef<typeof words>([])
   const isHostRef = useRef(false)
 
   // Keep wordsRef in sync
@@ -80,20 +82,6 @@ export default function LobbyPage() {
       return () => clearTimeout(timer)
     }
   }, [user, isLoading])
-
-  // Load words
-  useEffect(() => {
-    async function loadWords() {
-      try {
-        const res = await fetch(`/api/words?level=${selectedLevel}`)
-        const data = await res.json()
-        setWords(data.words || [])
-      } catch (err) {
-        console.error("Failed to load words:", err)
-      }
-    }
-    loadWords()
-  }, [selectedLevel])
 
   // Cleanup channel on unmount
   useEffect(() => {
@@ -292,52 +280,8 @@ export default function LobbyPage() {
   const handleStartGame = useCallback(async () => {
     if (!channelRef.current || !roomId || words.length < 10) return
 
-    // Select random questions
-    const shuffled = [...words].sort(() => Math.random() - 0.5)
-    const selectedWords = shuffled.slice(0, 10)
-    const questions: Question[] = selectedWords.map((word) => {
-      const types: QuestionType[] = ["en2cn", "cn2en", "listening"]
-      const type = types[Math.floor(Math.random() * types.length)]
-      let correctAnswer: string
-      let options: string[]
-
-      if (type === "en2cn") {
-        correctAnswer = word.meaningCn
-        const otherMeanings = [...new Set(
-          words.filter((w) => w.id !== word.id).map((w) => w.meaningCn)
-        )]
-        options = [correctAnswer, ...otherMeanings.sort(() => Math.random() - 0.5).slice(0, 3)]
-      } else if (type === "cn2en") {
-        correctAnswer = word.word
-        const otherWords = [...new Set(
-          words.filter((w) => w.id !== word.id).map((w) => w.word)
-        )]
-        options = [correctAnswer, ...otherWords.sort(() => Math.random() - 0.5).slice(0, 3)]
-      } else {
-        correctAnswer = word.word
-        const otherWords = [...new Set(
-          words.filter((w) => w.id !== word.id).map((w) => w.word)
-        )]
-        options = [correctAnswer, ...otherWords.sort(() => Math.random() - 0.5).slice(0, 3)]
-      }
-
-      // Deduplicate and ensure minimum 4 options
-      options = [...new Set(options)]
-      while (options.length < 4) {
-        options.push(`选项${options.length + 1}`)
-      }
-
-      // Shuffle options
-      options = options.sort(() => Math.random() - 0.5)
-
-      return {
-        id: word.id + "-" + type,
-        word,
-        type,
-        options,
-        correctAnswer,
-      }
-    })
+    // Select random questions using shared generator
+    const questions = generateQuestions(words, 10)
 
     // Mark as host before broadcasting so the broadcast handler skips re-init
     isHostRef.current = true

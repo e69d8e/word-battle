@@ -1,5 +1,6 @@
-import { NextRequest, NextResponse } from "next/server"
+import { NextRequest } from "next/server"
 import { prisma } from "@/lib/db"
+import { apiError, apiSuccess } from "@/lib/api"
 import cet4Data from "@/data/words/cet4.json"
 import cet6Data from "@/data/words/cet6.json"
 import toeflData from "@/data/words/toefl.json"
@@ -21,29 +22,23 @@ export async function GET(req: NextRequest) {
 
     const wordData = wordDataMap[level]
     if (!wordData) {
-      return NextResponse.json(
-        { error: "未找到对应级别的单词库" },
-        { status: 404 }
-      )
+      return apiError("未找到对应级别的单词库", 404)
     }
 
-    let dbWordList = await prisma.wordList.findFirst({
+    const dbWordList = await prisma.wordList.findFirst({
       where: { level },
       include: { words: true },
     })
 
     if (!dbWordList || dbWordList.words.length === 0) {
       console.log(`Word list for ${level} not found or empty in DB. Auto-seeding...`)
-      
+
       if (dbWordList) {
         await prisma.wordList.delete({ where: { id: dbWordList.id } })
       }
 
       const newWordList = await prisma.wordList.create({
-        data: {
-          name: wordData.name,
-          level,
-        },
+        data: { name: wordData.name, level },
       })
 
       await prisma.word.createMany({
@@ -57,17 +52,21 @@ export async function GET(req: NextRequest) {
         })),
       })
 
-      dbWordList = await prisma.wordList.findUnique({
-        where: { id: newWordList.id },
-        include: { words: true },
+      // Return seeded data directly — no need to re-query DB
+      return apiSuccess({
+        wordList: { name: wordData.name, level, wordCount: wordData.data.length },
+        words: wordData.data.map((w, i) => ({
+          id: `${newWordList.id}-${i}`,
+          word: w.word,
+          phonetic: w.phonetic || null,
+          meaning: w.meaning,
+          meaningCn: w.meaningCn,
+          example: w.example || null,
+        })),
       })
     }
 
-    if (!dbWordList) {
-      throw new Error("Failed to load or seed word list")
-    }
-
-    return NextResponse.json({
+    return apiSuccess({
       wordList: {
         name: dbWordList.name,
         level,
@@ -84,9 +83,6 @@ export async function GET(req: NextRequest) {
     })
   } catch (error) {
     console.error("Get words error:", error)
-    return NextResponse.json(
-      { error: "获取单词失败" },
-      { status: 500 }
-    )
+    return apiError("获取单词失败")
   }
 }
