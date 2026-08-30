@@ -1,30 +1,27 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useSyncExternalStore } from "react"
 import { usePathname } from "next/navigation"
 import { useAuthStore } from "@/stores/authStore"
 import { Button } from "@/components/ui/button"
 import { sound } from "@/lib/sound"
 import Link from "next/link"
 
+const subscribeSound = (callback: () => void) => {
+  window.addEventListener("word_battle_sound_toggle", callback)
+  return () => window.removeEventListener("word_battle_sound_toggle", callback)
+}
+const getSoundSnapshot = () => sound.isEnabled()
+const getSoundServerSnapshot = () => true
+
 export function Header() {
   const { user, logout } = useAuthStore()
   const pathname = usePathname()
   const [menuOpen, setMenuOpen] = useState(false)
-  const [soundEnabled, setSoundEnabled] = useState(() => sound.isEnabled())
-
-  useEffect(() => {
-    const handleToggle = (e: Event) => {
-      const customEvent = e as CustomEvent<{ enabled: boolean }>
-      setSoundEnabled(customEvent.detail.enabled)
-    }
-    window.addEventListener("word_battle_sound_toggle", handleToggle)
-    return () => window.removeEventListener("word_battle_sound_toggle", handleToggle)
-  }, [])
+  const soundEnabled = useSyncExternalStore(subscribeSound, getSoundSnapshot, getSoundServerSnapshot)
 
   const toggleSound = () => {
     const nextState = sound.toggle()
-    setSoundEnabled(nextState)
     if (nextState) {
       sound.playClick()
     }

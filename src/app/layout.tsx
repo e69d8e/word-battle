@@ -33,7 +33,7 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="zh-CN" className={`${inter.variable} ${cormorant.variable}`}>
+    <html lang="zh-CN" suppressHydrationWarning className={`${inter.variable} ${cormorant.variable}`}>
       <body className="min-h-screen bg-canvas text-body">
         <AuthProvider>
           <Header />

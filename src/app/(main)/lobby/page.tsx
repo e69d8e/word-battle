@@ -1,7 +1,7 @@
 "use client"
 
-import { useState, useEffect, useCallback, useRef } from "react"
-import { useRouter } from "next/navigation"
+import { useState, useEffect, useCallback, useRef, Suspense } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -13,7 +13,6 @@ import { getSupabase } from "@/lib/supabase"
 import type { RealtimeChannel } from "@supabase/supabase-js"
 import { generateQuestions } from "@/lib/questions"
 import { useWords } from "@/hooks/useWords"
-import { generateId } from "@/lib/utils"
 import { sound } from "@/lib/sound"
 import type { WordLevel, Question } from "@/types"
 
@@ -30,65 +29,47 @@ interface RoomState {
   questions?: Question[]
 }
 
-export default function LobbyPage() {
+function LobbyContent() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { user } = useAuthStore()
   const { initGame } = useGameStore()
 
   const channelRef = useRef<RealtimeChannel | null>(null)
   const joinTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const [playerId] = useState<string>(() => {
-    if (typeof window !== "undefined") {
-      const saved = localStorage.getItem("lobbyPlayerId")
-      if (saved) return saved
-    }
-    const id = generateId()
-    if (typeof window !== "undefined") localStorage.setItem("lobbyPlayerId", id)
-    return id
-  })
+  const playerId = user?.id || ""
   const playerIdRef = useRef<string>(playerId)
   const roomRef = useRef<RoomState | null>(null)
 
-  const [activeTab, setActiveTab] = useState<"create" | "join">(() => {
-    if (typeof window !== "undefined") {
-      const params = new URLSearchParams(window.location.search)
-      if (params.get("join") || params.get("room")) return "join"
-    }
-    return "create"
-  })
+  const initialJoinCode = (searchParams.get("join") || searchParams.get("room") || "").toUpperCase()
+  const [activeTab, setActiveTab] = useState<"create" | "join">(() => (initialJoinCode ? "join" : "create"))
   const [roomId, setRoomId] = useState("")
-  const [joinRoomId, setJoinRoomId] = useState(() => {
-    if (typeof window !== "undefined") {
-      const params = new URLSearchParams(window.location.search)
-      const code = params.get("join") || params.get("room")
-      if (code) return code.toUpperCase()
-    }
-    return ""
-  })
+  const [joinRoomId, setJoinRoomId] = useState(() => initialJoinCode)
   const [room, setRoom] = useState<RoomState | null>(null)
   const [status, setStatus] = useState<"idle" | "creating" | "joining" | "waiting" | "playing">("idle")
   const [error, setError] = useState("")
   const [copyToast, setCopyToast] = useState<string | null>(null)
 
-  const [selectedLevel, setSelectedLevel] = useState<WordLevel>(() => {
-    if (typeof window !== "undefined") {
-      return (localStorage.getItem("lobbyLevel") as WordLevel) || "CET4"
-    }
-    return "CET4"
-  })
+  const [selectedLevel, setSelectedLevel] = useState<WordLevel>("CET4")
   const { words } = useWords(selectedLevel)
   const wordsRef = useRef<typeof words>([])
   const isHostRef = useRef(false)
 
-  // Keep wordsRef in sync
+  // Keep wordsRef and playerIdRef in sync
   useEffect(() => {
     wordsRef.current = words
   }, [words])
 
+  useEffect(() => {
+    playerIdRef.current = playerId
+  }, [playerId])
+
   // Persist selectedLevel to localStorage
   useEffect(() => {
-    localStorage.setItem("lobbyLevel", selectedLevel)
+    if (typeof window !== "undefined") {
+      localStorage.setItem("lobbyLevel", selectedLevel)
+    }
   }, [selectedLevel])
 
   // Redirect to login if not authenticated
@@ -611,5 +592,19 @@ export default function LobbyPage() {
         </Card>
       )}
     </div>
+  )
+}
+
+export default function LobbyPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="max-w-xl mx-auto px-4 py-16 flex flex-col items-center justify-center">
+          <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+        </div>
+      }
+    >
+      <LobbyContent />
+    </Suspense>
   )
 }

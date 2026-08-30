@@ -39,7 +39,7 @@ export async function POST(req: NextRequest) {
         questions: questions
           ? {
               create: questions.map((q: { wordId?: string; type: string; options: string[]; answer1?: string; answer2?: string; correct1?: boolean; correct2?: boolean; time1?: number; time2?: number }) => ({
-                wordId: q.wordId || null,
+                wordId: null,
                 type: q.type,
                 options: JSON.stringify(q.options),
                 answer1: q.answer1,
