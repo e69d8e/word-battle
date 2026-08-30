@@ -23,7 +23,7 @@ export default function GamePage() {
   const {
     mode, status, questions, currentIndex,
     score1, score2, combo1, combo2, lastScoreGained1, lastScoreGained2, answers1,
-    initGame, submitAnswer, nextQuestion, finishGame, resetGame
+    initGame, submitAnswer, syncOpponentAnswer, syncOpponentFinished, nextQuestion, finishGame, resetGame
   } = useGameStore()
 
   const [selectedMode, setSelectedMode] = useState<GameMode>("ai")
@@ -111,22 +111,25 @@ export default function GamePage() {
     const finalQuestions = finalState.questions
     const finalWordLevel = finalState.wordLevel
 
-    // For realtime mode, use opponent answers from broadcast
-    const opponentAnswers = finalMode === "realtime" ? opponentAnswersRef.current : finalAnswers2
+    // For realtime mode, use merged opponent answers
+    const opponentAnswers = finalMode === "realtime"
+      ? { ...finalAnswers2, ...opponentAnswersRef.current }
+      : finalAnswers2
 
     // Get player usernames (fallback to "玩家" when not logged in)
     const p1Username = user?.username || "玩家"
     const p2Username = finalMode === "realtime"
-      ? (opponentUsernameRef.current || "对手")
+      ? (opponentUsernameRef.current || opponentUsername || "对手")
       : "AI 机器人"
 
     const finalMaxCombo1 = finalState.maxCombo1
     const finalMaxCombo2 = finalState.maxCombo2
 
     const answers1Arr = Object.values(finalAnswers1)
-    const answers2Arr = Object.values(finalAnswers2)
-    const accuracy1 = answers1Arr.length > 0 ? Math.round((answers1Arr.filter((a) => a.correct).length / finalQuestions.length) * 100) : 0
-    const accuracy2 = answers2Arr.length > 0 ? Math.round((answers2Arr.filter((a) => a.correct).length / finalQuestions.length) * 100) : 0
+    const answers2Arr = Object.values(opponentAnswers)
+    const totalQCount = finalQuestions.length || 10
+    const accuracy1 = totalQCount > 0 ? Math.round((answers1Arr.filter((a) => a.correct).length / totalQCount) * 100) : 0
+    const accuracy2 = totalQCount > 0 ? Math.round((answers2Arr.filter((a) => a.correct).length / totalQCount) * 100) : 0
     const avgTime1 = answers1Arr.length > 0 ? Number((answers1Arr.reduce((acc, curr) => acc + curr.time, 0) / (answers1Arr.length * 1000)).toFixed(1)) : 0
     const avgTime2 = answers2Arr.length > 0 ? Number((answers2Arr.reduce((acc, curr) => acc + curr.time, 0) / (answers2Arr.length * 1000)).toFixed(1)) : 0
 
@@ -157,9 +160,7 @@ export default function GamePage() {
         example: q.word.example,
         type: q.type,
         correct1: finalAnswers1[q.id]?.correct || false,
-        correct2: finalMode === "realtime"
-          ? (opponentAnswers as Record<string, { correct: boolean }>)[q.id]?.correct || false
-          : finalAnswers2[q.id]?.correct || false,
+        correct2: (opponentAnswers as Record<string, { correct: boolean }>)[q.id]?.correct || false,
       })),
     }
 
@@ -209,7 +210,7 @@ export default function GamePage() {
     }).catch((err) => {
       console.error("Failed to save game:", err)
     })
-  }, [user])
+  }, [user, opponentUsername])
 
   // Advance game: next question or finish — shared by handleTimeout and handleAnswer
   const advanceGame = useCallback((delay: number) => {
@@ -224,7 +225,13 @@ export default function GamePage() {
           channelRef.current.send({
             type: "broadcast",
             event: "player-finished",
-            payload: { playerId: user.id, username: user.username },
+            payload: {
+              playerId: user.id,
+              username: user.username,
+              finalScore: state.score1,
+              maxCombo: state.maxCombo1,
+              answers: state.answers1,
+            },
           })
         }
         if (opponentFinishedRef.current) {
@@ -261,6 +268,10 @@ export default function GamePage() {
           answer: "",
           timeMs: questionTimeLimit * 1000,
           isCorrect: false,
+          totalScore: state.score1,
+          combo: state.combo1,
+          maxCombo: state.maxCombo1,
+          lastScoreGained: 0,
           score: 0,
         },
       })
@@ -359,8 +370,8 @@ export default function GamePage() {
         console.log("[Realtime] Received answer-submitted from playerId:", payload.playerId, "currentUserId:", currentUserId)
         // Receive opponent's answer - check if it's from a different player
         if (payload.playerId !== currentUserId) {
-          const { questionId, answer, timeMs, isCorrect, score, username } = payload
-          console.log("[Realtime] Processing opponent answer, isCorrect:", isCorrect)
+          const { questionId, answer, timeMs, isCorrect, score, totalScore, combo, maxCombo, lastScoreGained, username } = payload
+          console.log("[Realtime] Processing opponent answer, isCorrect:", isCorrect, "totalScore:", totalScore)
           // Store opponent's username
           if (username && !opponentUsernameRef.current) {
             opponentUsernameRef.current = username
@@ -373,9 +384,19 @@ export default function GamePage() {
             opponentCorrectCountRef.current += 1
             setOpponentCorrectCount(opponentCorrectCountRef.current)
           }
-          // Update opponent's score in the store
-          const currentScore = useGameStore.getState().score2
-          useGameStore.getState().updateScore(2, currentScore + score)
+
+          // Authoritative sync to gameStore
+          const computedTotalScore = totalScore !== undefined ? totalScore : (useGameStore.getState().score2 + (score || 0))
+          syncOpponentAnswer({
+            questionId,
+            answer,
+            isCorrect,
+            timeMs,
+            totalScore: computedTotalScore,
+            combo: combo ?? (isCorrect ? (useGameStore.getState().combo2 + 1) : 0),
+            maxCombo: maxCombo ?? 0,
+            lastScoreGained: lastScoreGained ?? (isCorrect ? (score || 0) : 0),
+          })
         }
       })
       .on("broadcast", { event: "player-finished" }, ({ payload }) => {
@@ -384,6 +405,25 @@ export default function GamePage() {
         if (payload.playerId !== currentUserId) {
           console.log("[Realtime] Opponent finished!")
           opponentFinishedRef.current = true
+
+          if (payload.username && !opponentUsernameRef.current) {
+            opponentUsernameRef.current = payload.username
+            setOpponentUsername(payload.username)
+          }
+
+          if (payload.answers) {
+            opponentAnswersRef.current = {
+              ...opponentAnswersRef.current,
+              ...payload.answers,
+            }
+          }
+
+          syncOpponentFinished({
+            finalScore: payload.finalScore,
+            maxCombo: payload.maxCombo,
+            answers: payload.answers,
+          })
+
           // If self also finished, proceed to game end
           if (selfFinishedRef.current) {
             console.log("[Realtime] Both finished, ending game")
@@ -454,7 +494,7 @@ export default function GamePage() {
         supabase.removeChannel(channel)
       }
     }
-  }, [mode, user?.id, finishGame, handleGameEnd, initGame, resetGame])
+  }, [mode, user?.id, finishGame, handleGameEnd, initGame, resetGame, syncOpponentAnswer, syncOpponentFinished])
 
   const currentQuestion = questions[currentIndex]
   const hasAnswered = currentQuestion ? !!answers1[currentQuestion.id] : false
@@ -494,15 +534,12 @@ export default function GamePage() {
       if (answeredRef.current) return
       answeredRef.current = true
 
-      const isCorrect = submitAnswer(1, answer, timeMs)
+      submitAnswer(1, answer, timeMs)
 
       // Broadcast answer to opponent in realtime mode
       if (mode === "realtime" && channelRef.current && user) {
         const state = useGameStore.getState()
         const q = state.questions[state.currentIndex]
-        const baseScore = isCorrect ? 100 : 0
-        const timeBonus = isCorrect ? Math.max(0, Math.floor((15000 - timeMs) / 100)) : 0
-        const totalScore = baseScore + timeBonus
 
         channelRef.current.send({
           type: "broadcast",
@@ -513,8 +550,12 @@ export default function GamePage() {
             questionId: q?.id,
             answer,
             timeMs,
-            isCorrect,
-            score: totalScore,
+            isCorrect: state.answers1[q?.id || ""]?.correct || false,
+            totalScore: state.score1,
+            combo: state.combo1,
+            maxCombo: state.maxCombo1,
+            lastScoreGained: state.lastScoreGained1,
+            score: state.lastScoreGained1,
           },
         })
       }

@@ -7,6 +7,21 @@ interface GameStore extends GameState {
   // Actions
   initGame: (mode: GameMode, wordLevel: WordLevel, words: WordItem[], totalQ?: number, presetQuestions?: Question[]) => void
   submitAnswer: (player: 1 | 2, answer: string, timeMs: number) => boolean
+  syncOpponentAnswer: (data: {
+    questionId: string
+    answer: string
+    isCorrect: boolean
+    timeMs: number
+    totalScore: number
+    combo: number
+    maxCombo: number
+    lastScoreGained: number
+  }) => void
+  syncOpponentFinished: (data: {
+    finalScore?: number
+    maxCombo?: number
+    answers?: Record<string, { answer: string; correct: boolean; time: number }>
+  }) => void
   nextQuestion: () => void
   finishGame: () => void
   resetGame: () => void
@@ -95,6 +110,29 @@ export const useGameStore = create<GameStore>((set, get) => ({
     })
 
     return isCorrect
+  },
+
+  syncOpponentAnswer: ({ questionId, answer, isCorrect, timeMs, totalScore, combo, maxCombo, lastScoreGained }) => {
+    const state = get()
+    set({
+      score2: totalScore,
+      combo2: combo,
+      maxCombo2: Math.max(state.maxCombo2, maxCombo),
+      lastScoreGained2: lastScoreGained,
+      answers2: {
+        ...state.answers2,
+        [questionId]: { answer, correct: isCorrect, time: timeMs },
+      },
+    })
+  },
+
+  syncOpponentFinished: ({ finalScore, maxCombo, answers }) => {
+    const state = get()
+    set({
+      ...(finalScore !== undefined ? { score2: finalScore } : {}),
+      ...(maxCombo !== undefined ? { maxCombo2: Math.max(state.maxCombo2, maxCombo) } : {}),
+      ...(answers ? { answers2: { ...state.answers2, ...answers } } : {}),
+    })
   },
 
   nextQuestion: () => {
