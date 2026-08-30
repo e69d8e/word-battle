@@ -1,262 +1,290 @@
-# Word Battle 单词大作战
+# Word Battle 单词大作战 ⚔️
 
-一个面向中国用户的英语单词 PK 对战平台，支持 CET-4、CET-6、TOEFL、IELTS 词汇学习。玩家可以与 AI 或真人好友进行实时单词对战，在游戏中提升词汇量。
+一个专为英语学习者打造的高节奏、多端支持的单词竞技 PK 平台。涵盖 CET-4、CET-6、TOEFL、IELTS 四大核心词库，支持人机对练与基于 Supabase Realtime 的毫秒级真人双人实时同屏对决。
 
-![Next.js](https://img.shields.io/badge/Next.js-16-black)
-![React](https://img.shields.io/badge/React-19-61DAFB)
-![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6)
-![Tailwind CSS](https://img.shields.io/badge/Tailwind%20CSS-v4-06B6D4)
-![Prisma](https://img.shields.io/badge/Prisma-6-2D3748)
-![Supabase](https://img.shields.io/badge/Supabase-Realtime-3FCF8E)
+![Next.js](https://img.shields.io/badge/Next.js-16.2-black?logo=next.js)
+![React](https://img.shields.io/badge/React-19-61DAFB?logo=react)
+![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript)
+![Tailwind CSS](https://img.shields.io/badge/Tailwind%20CSS-v4-06B6D4?logo=tailwindcss)
+![Prisma](https://img.shields.io/badge/Prisma-6-2D3748?logo=prisma)
+![Supabase](https://img.shields.io/badge/Supabase-Realtime-3FCF8E?logo=supabase)
+![Electron](https://img.shields.io/badge/Electron-42-47848F?logo=electron)
 
-## 功能特性
+---
 
-### 游戏模式
-- **🤖 人机对战** - 与 AI 进行单词 PK，适合单人练习和自测（AI 准确率约 70%）
-- **⚡ 实时对战** - 通过 Supabase Realtime 与朋友实时比拼答题速度和正确率
-- **📨 异步挑战** - 发起挑战，好友随时应战（即将上线）
+## 目录
 
-### 题型
-- **英译中** - 看英文选中文释义
-- **中译英** - 看中文选英文单词
-- **听音选词** - 听发音选正确单词
+- [核心特性](#-核心特性)
+- [游戏与计分机制](#-游戏与计分机制)
+- [系统架构与时序](#-系统架构与时序)
+- [技术栈清单](#-技术栈清单)
+- [数据模型](#-数据模型)
+- [API 接口清单](#-api-接口清单)
+- [环境搭建与本地运行](#-环境搭建与本地运行)
+- [构建与多端部署](#-构建与多端部署)
 
-### 词汇级别
-| 级别 | 描述 | 词汇量 |
-|------|------|--------|
-| CET-4 | 大学英语四级 | 4500+ |
-| CET-6 | 大学英语六级 | 6500+ |
-| TOEFL | 托福词汇 | 8000+ |
-| IELTS | 雅思词汇 | 5000+ |
+---
 
-### 计分规则
-- 基础分：答对一题得 **100 分**
-- 时间奖励：每题 15 秒限时，剩余时间转化为额外分数（最高 50 分）
-- 答错不得分
+## 🌟 核心特性
 
-## 技术栈
+### 1. 多样化对战模式
+- **🤖 人机对战**：内置具备动态响应延迟与 ~70% 真实准确率的智能 AI 对手，适合日常速练与碎片时间自测。
+- **⚡ 实时在线对决**：基于 Supabase Realtime 广播频道，支持 6 位专属房间码一键创建/加入，毫秒级同步对手作答状态、连击与得分。
+- **🔄 一键无缝重赛**：对局结束后支持双方一键申请 Rematch，由房主自动生成全新题库无缝开战。
 
-| 类别 | 技术 |
-|------|------|
-| 框架 | Next.js 16 (App Router) |
-| UI | React 19 + Tailwind CSS v4 |
-| 类型 | TypeScript (strict mode) |
-| 状态管理 | Zustand |
-| 数据库 | Supabase PostgreSQL + Prisma ORM |
-| 实时通信 | Supabase Realtime |
-| 桌面端 | Electron |
-| 部署 | Netlify |
+### 2. 多维题型与词库覆盖
+- **英译中**：看英文选正确中文释义。
+- **中译英**：看中文快速识别英文单词。
+- **听音选词**：原生标准美式发音实时播放，听音辨义。
+- **词库体系**：
+  | 词库级别 | 适用人群 / 考试 | 词汇量 |
+  | :--- | :--- | :--- |
+  | **CET-4** | 大学英语四级考试 | 4,500+ |
+  | **CET-6** | 大学英语六级考试 | 6,500+ |
+  | **TOEFL** | 托福出国留学考试 | 8,000+ |
+  | **IELTS** | 雅思学术/移民类考试 | 5,000+ |
 
-## 项目结构
+### 3. 极速操作与交互体验
+- **全键盘快捷键**：支持 `A` / `B` / `C` / `D` 或 `1` / `2` / `3` / `4` 盲打击键选词，`Space` 触发标准读音朗读。
+- **原生音效引擎**：基于 Web Audio API 实现纯合成音效（倒计时、连击音阶爬升、胜负专属旋律），支持全局一键静音。
+- **错题复习本**：结算页支持「全部 / 仅错题 / 答对」多维筛选，单词音标、释义、例句与标准发音随选随听。
+- **生涯战报与段位**：自动统计生涯场次、胜率、历史最高分，评估王者/大师/新星段位；支持一键复制对局战报文本。
+- **天梯名人堂**：支持分词库排行榜筛选与 Top-3 领奖台视觉呈现。
 
+---
+
+## 🎯 游戏与计分机制
+
+每局标准对战为 **10 道随机题目**，每题答题限时 **15 秒**。
+
+### 计分公式
+$$\text{单题总分} = \text{基础分} + \text{速度奖励分} + \text{连击加成分}$$
+
+- **基础得分（Base Score）**：答对得 **100 分**，答错得 **0 分**。
+- **速度奖励（Time Bonus）**：$$\text{Bonus} = \max\left(0, \left\lfloor \frac{15000 - \text{答题耗时(ms)}}{100} \right\rfloor\right)$$（最高可得 **50 分**）。
+- **连击加成（Combo Bonus）**：
+  - 连续答对第 2 题起触发连击奖励：$$\text{Combo Bonus} = \min\left(50, (\text{当前连击数} - 1) \times 10\right)$$（最高可得 **50 分**）。
+  - 答错或超时将立即中断连击，连击数重置为 **0**。
+- **单题满分**：最高 **200 分**；单局 10 题理论巅峰得分为 **2,279+ 分**。
+
+---
+
+## 🏗 系统架构与时序
+
+### 实时对战时序图
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor A as 玩家 A (Host)
+    participant S as Supabase Realtime (room:CODE)
+    actor B as 玩家 B (Joiner)
+
+    Note over A,B: 房间就绪阶段
+    A->>S: createRoom & broadcast("room-update")
+    B->>S: joinRoom & broadcast("request-state")
+    A->>S: broadcast("room-update", { players: [A, B] })
+    A->>S: broadcast("game-started", { questions, totalQuestions })
+    S-->>B: 同步题库并进入对战页
+
+    Note over A,B: 答题与实时同步阶段
+    A->>A: 本地提交答题 (计算 score1, combo1)
+    A->>S: broadcast("answer-submitted", { totalScore, combo, maxCombo, lastScoreGained, isCorrect })
+    S-->>B: syncOpponentAnswer (更新 score2, combo2, 触发浮动得分与🔥动画)
+
+    Note over A,B: 终态结算阶段
+    A->>S: broadcast("player-finished", { finalScore, maxCombo, answers })
+    B->>S: broadcast("player-finished", { finalScore, maxCombo, answers })
+    Note over A,B: 双方终态数据校验无误后调用 finishGame() 并保存战报至 DB
 ```
-src/
-├── app/
-│   ├── page.tsx                 # 首页（Hero + 功能介绍）
-│   ├── layout.tsx               # 根布局：AuthProvider + Header
-│   ├── (auth)/
-│   │   ├── login/               # 登录页
-│   │   └── register/            # 注册页
-│   ├── (main)/
-│   │   ├── game/                # 游戏主页面（模式选择 + 游戏进行）
-│   │   ├── lobby/               # 实时对战大厅（创建/加入房间）
-│   │   ├── leaderboard/         # 全球排行榜
-│   │   └── history/             # 游戏历史记录
-│   └── api/                     # API 路由
-│       ├── auth/                # 认证接口（注册/登录/获取用户）
-│       ├── game/                # 游戏记录接口
-│       ├── words/               # 单词数据接口（自动种子）
-│       └── leaderboard/         # 排行榜接口
-├── components/
-│   ├── game/                    # 游戏组件（QuestionCard, ScoreBoard, Timer, GameResult）
-│   ├── layout/                  # 布局组件（Header）
-│   ├── providers/               # Context Providers（AuthProvider）
-│   └── ui/                      # 通用 UI 组件（Button, Card, Input, Badge, Progress）
-├── stores/                      # Zustand 状态管理
-│   ├── authStore.ts             # 用户认证状态
-│   └── gameStore.ts             # 游戏状态机
-├── hooks/                       # 自定义 Hooks
-│   ├── useSpeech.ts             # Web Speech API
-│   └── useTimer.ts              # 基于 rAF 的计时器
-├── lib/                         # 工具库
-│   ├── db.ts                    # Prisma 单例
-│   ├── supabase.ts              # Supabase 客户端
-│   └── utils.ts                 # 工具函数
-├── types/                       # TypeScript 类型定义
-└── data/words/                  # 词汇数据 JSON 文件
-    ├── cet4.json
-    ├── cet6.json
-    ├── toefl.json
-    └── ielts.json
+
+---
+
+## 💻 技术栈清单
+
+| 领域 / 层级 | 技术选型 | 说明 |
+| :--- | :--- | :--- |
+| **应用框架** | Next.js 16.2.6 (App Router) | 全 Client Components 架构，支持 React 19 新特性 |
+| **编程语言** | TypeScript 5.x (Strict) | 严谨的前后端类型约束 |
+| **样式系统** | Tailwind CSS v4 + PostCSS | 定制化主题色板、响应式断点与流畅微动画 |
+| **状态管理** | Zustand | 轻量级高性能游戏状态机 (`gameStore`) 与鉴权状态 (`authStore`) |
+| **数据库** | PostgreSQL (Supabase) + Prisma 6 | ORM 数据持久化与高并发连接池支持 |
+| **实时通信** | Supabase Realtime | WebSocket 广播与 Presence 房间监听通道 |
+| **音频引擎** | Web Audio API + Web Speech API | 零第三方依赖合成音效 + 浏览器原声朗读 fallback |
+| **桌面客户端** | Electron 42 + Electron Builder | 支持跨平台桌面端独立打包 |
+| **部署托管** | Netlify (`@netlify/plugin-nextjs`) | 自动化 CI/CD 与 Edge 网络分发 |
+
+---
+
+## 🗄 数据模型
+
+```mermaid
+erDiagram
+    User ||--o{ Game : "player1 / player2"
+    User ||--o{ Score : "records"
+    WordList ||--o{ Word : "contains"
+    Word ||--o{ GameQuestion : "references"
+    Game ||--o{ GameQuestion : "has"
+
+    User {
+        string id PK
+        string username UK
+        string password
+        string avatar
+        datetime createdAt
+    }
+
+    WordList {
+        string id PK
+        string name
+        string level
+    }
+
+    Word {
+        string id PK
+        string word
+        string phonetic
+        string meaning
+        string meaningCn
+        string example
+        string listId FK
+    }
+
+    Game {
+        string id PK
+        string mode
+        string status
+        string wordLevel
+        string player1Id FK
+        string player2Id FK
+        string winnerId FK
+        int score1
+        int score2
+        int totalQ
+        datetime finishedAt
+        datetime createdAt
+    }
+
+    GameQuestion {
+        string id PK
+        string gameId FK
+        string wordId FK
+        string type
+        string options
+        string answer1
+        string answer2
+        boolean correct1
+        boolean correct2
+        int time1
+        int time2
+    }
+
+    Score {
+        string id PK
+        string userId FK
+        string mode
+        string level
+        int score
+        datetime createdAt
+    }
 ```
 
-## 快速开始
+---
 
-### 环境要求
-- Node.js 18+
-- PostgreSQL 数据库（推荐使用 Supabase）
+## 🔌 API 接口清单
 
-### 安装
+| 请求方法 | 路由路径 | 参数 / Body | 功能描述 |
+| :--- | :--- | :--- | :--- |
+| `POST` | `/api/auth/register` | `{ username, password }` | 用户注册（bcrypt 加密存储） |
+| `POST` | `/api/auth/login` | `{ username, password }` | 用户登录与凭证验证 |
+| `GET` | `/api/auth/me` | Query: `?userId=...` | 获取当前用户信息 |
+| `GET` | `/api/words` | Query: `?level=CET4` | 获取指定等级单词库（首次请求自动从本地 JSON 种子入库） |
+| `POST` | `/api/game` | `{ mode, wordLevel, player1Id, score1, score2, questions }` | 保存游戏对局记录及天梯积分 |
+| `GET` | `/api/game` | Query: `?userId=...&mode=...&limit=20` | 查询用户历史对战记录 |
+| `GET` | `/api/leaderboard`| Query: `?mode=...&level=CET4&limit=50` | 获取全球天梯排行榜 |
+
+---
+
+## 🚀 环境搭建与本地运行
+
+### 1. 环境准备
+- Node.js 18.18+ 或 Node.js 20+
+- PostgreSQL 数据库（推荐直接使用 [Supabase](https://supabase.com)）
+
+### 2. 本地安装
 
 ```bash
-# 克隆项目
-git clone https://github.com/your-username/word-battle.git
+# 1. 克隆代码仓库
+git clone https://github.com/e69d8e/word-battle.git
 cd word-battle
 
-# 安装依赖
+# 2. 安装项目依赖
 npm install
 
-# 配置环境变量
+# 3. 配置环境变量
 cp .env.example .env
-# 编辑 .env 文件，填入数据库连接信息
 ```
 
-### 环境变量
+### 3. 配置 `.env`
 
-```bash
-# Supabase PostgreSQL
-DATABASE_URL=postgresql://postgres:[PASSWORD]@db.[PROJECT-REF].supabase.co:5432/postgres
-DIRECT_URL=postgresql://postgres:[PASSWORD]@db.[PROJECT-REF].supabase.co:5432/postgres
+```env
+# Supabase PostgreSQL 连接串
+DATABASE_URL="postgresql://postgres:[PASSWORD]@db.[PROJECT-REF].supabase.co:5432/postgres?pgbouncer=true"
+DIRECT_URL="postgresql://postgres:[PASSWORD]@db.[PROJECT-REF].supabase.co:5432/postgres"
 
-# Supabase 客户端（用于 Realtime）
-NEXT_PUBLIC_SUPABASE_URL=https://[PROJECT-REF].supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=[ANON-KEY]
+# Supabase Realtime 客户端凭证
+NEXT_PUBLIC_SUPABASE_URL="https://[PROJECT-REF].supabase.co"
+NEXT_PUBLIC_SUPABASE_ANON_KEY="your-anon-key"
 ```
 
-### 数据库设置
+### 4. 初始化数据库
 
 ```bash
 # 生成 Prisma Client
 npm run prisma:generate
 
-# 执行数据库迁移
+# 应用数据库迁移
 npm run prisma:migrate
 
-# 种子数据（可选，单词数据会在首次请求时自动加载）
+# （可选）手动灌入初始单词数据
 npm run db:seed
 ```
 
-### 开发
+### 5. 启动服务
 
 ```bash
-# 启动开发服务器
+# 启动 Web 开发服务器 (localhost:3000)
 npm run dev
 
-# 或启动 Electron 桌面端开发
+# 或启动 Electron 桌面端开发环境
 npm run electron-dev
 ```
 
-访问 http://localhost:3000
+---
 
-### 构建
+## 📦 构建与多端部署
 
-```bash
-# Web 版本构建
-npm run build
-
-# Electron 桌面端构建
-npm run electron-build
-```
-
-## 在线体验
-
-| 平台 | 地址 |
-|------|------|
-| Netlify | https://word-pk-li.netlify.app |
-| Vercel | https://word-battle-six.vercel.app |
-
-## 部署
-
-### Netlify（推荐）
-
-项目已配置 `netlify.toml`，推送到 GitHub 后可直接在 Netlify 部署：
-
-```toml
-[build]
-  command = "npm run build"
-  publish = ".next"
-
-[[plugins]]
-  package = "@netlify/plugin-nextjs"
-```
-
-### 手动部署
+### Web 生产构建
 
 ```bash
-# 构建
 npm run build
-
-# 启动生产服务器
 npm start
 ```
 
-## API 接口
-
-| 方法 | 路径 | 描述 |
-|------|------|------|
-| POST | `/api/auth/register` | 用户注册 |
-| POST | `/api/auth/login` | 用户登录 |
-| GET | `/api/auth/me` | 获取当前用户信息 |
-| GET | `/api/words?level=CET4` | 获取单词列表（自动种子） |
-| POST | `/api/game` | 保存游戏记录 |
-| GET | `/api/game` | 获取游戏历史 |
-| GET | `/api/leaderboard` | 获取排行榜 |
-
-## 实时对战架构
-
-实时对战基于 Supabase Realtime channels 实现：
-
-```
-客户端 A                    Supabase Realtime                    客户端 B
-    │                           │                                    │
-    ├── 创建房间 ──────────────►│                                    │
-    │                           │◄─────────────── 加入房间 ──────────┤
-    │                           │                                    │
-    ├── 提交答案(answer-submitted) ──────────►│                      │
-    │                           │◄──── 广播答案给对手 ───────────────┤
-    │                           │                                    │
-    ├── 完成通知(player-finished) ────────────►│                      │
-    │                           │◄──── 广播完成状态 ─────────────────┤
-    │                           │                                    │
-    └── 游戏结束(game-ended) ──►│◄──── 游戏结束 ────────────────────┘
-```
-
-**频道命名**：`room:{roomId}`
-
-**事件类型**：
-- `answer-submitted` - 答案提交（包含答案、耗时、正确性、得分）
-- `player-finished` - 玩家完成所有题目
-- `game-ended` - 游戏结束
-
-## 数据模型
-
-```prisma
-User          # 用户（id, username, password, avatar）
-WordList      # 词表（name, level）
-Word          # 单词（word, phonetic, meaning, meaningCn, example）
-Game          # 对局（mode, status, scores, players）
-GameQuestion  # 题目（options, answers, correctness, time）
-Score         # 成绩（userId, mode, level, score）
-```
-
-## 开发命令
+### 桌面端打包 (Electron)
 
 ```bash
-npm run dev              # 开发服务器
-npm run build            # 生产构建
-npm run lint             # ESLint 检查
-npm run prisma:studio    # Prisma Studio 数据库管理
-npm run prisma:migrate   # 创建并执行迁移
-npm run prisma:generate  # 重新生成 Prisma Client
-npm run db:seed          # 种子数据
-npm run electron-dev     # Electron 开发模式
-npm run electron-build   # Electron 构建
+npm run electron-build
 ```
 
-## License
-
-MIT
+### 自动化部署 (Netlify)
+仓库已集成 `netlify.toml`，绑定 GitHub 仓库后即可实现自动化流水线构建：
+- 构建指令：`node scripts/download-audio.js && npm run build`
+- 发布目录：`.next`
+- 插件配置：`@netlify/plugin-nextjs`
 
 ---
 
-**Word Battle** - 让英语单词学习变得有趣！⚔️
+## 📄 License
+
+本项目基于 [MIT License](LICENSE) 开源。
