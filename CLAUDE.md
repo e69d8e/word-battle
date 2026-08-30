@@ -36,8 +36,8 @@ No test framework is configured. The Next.js docs at `node_modules/next/dist/doc
 ## Architecture
 
 ### Deployment
-- **Web:** Deployed on Netlify with `@netlify/plugin-nextjs`
-- **Desktop:** Electron wrapper — `electron/main.ts` loads `localhost:3000` in dev or `../out/index.html` in production
+- **Web:** Deployed on Netlify with `@netlify/plugin-nextjs` — build command runs `download-audio.js` first
+- **Desktop:** Electron wrapper — `electron/main.ts` loads `localhost:3000` in dev or `../out/index.html` in production. Uses `electron-builder` with DMG/NSIS/AppImage targets
 - **Database:** Supabase PostgreSQL (cloud-hosted)
 - **Realtime:** Supabase Realtime channels (replaces Socket.io)
 
@@ -47,7 +47,7 @@ No test framework is configured. The Next.js docs at `node_modules/next/dist/doc
 - **Game modes:**
   - **AI mode:** Simulated opponent with ~70% accuracy and random response delays
   - **Realtime mode:** Supabase Realtime channels for multiplayer (create/join rooms, real-time synchronization)
-- **UI components:** Custom components in `src/components/ui/` (button, card, input, badge, progress) — no external UI library
+- **UI components:** Custom components in `src/components/ui/` — no external UI library. Use `React.forwardRef` pattern with `cn()` for className merging
 - **Path alias:** `@/*` maps to `./src/*`
 
 ### Backend (Next.js API Route Handlers in `src/app/api/`)
@@ -65,6 +65,8 @@ Uses Supabase Realtime channels (`src/lib/supabase.ts`):
 ### Database (Supabase PostgreSQL via Prisma)
 Key models: User, WordList, Word, Game, GameQuestion, Score. See `prisma/schema.prisma` for full schema.
 - Connection via `DATABASE_URL` (pooled) and `DIRECT_URL` (direct, for migrations)
+- `GameQuestion.options` is stored as JSON string (serialized array of 4 options)
+- `Score` has composite index on `(userId, mode, level)` for efficient leaderboard queries
 
 ### Auth model
 Simple localStorage-based: user ID stored client-side, passed as query param to API routes. No JWT, no sessions, no middleware auth guards.
@@ -75,30 +77,35 @@ Simple localStorage-based: user ID stored client-side, passed as query param to 
 src/
   app/
     page.tsx                 # Landing page (hero + features)
-    layout.tsx               # Root layout: AuthProvider + Header
+    layout.tsx               # Root layout: AuthProvider + Header + fonts
+    globals.css              # Tailwind v4 @theme with design tokens
     (auth)/login/, register/ # Auth pages (route group, no layout)
     (main)/
-      game/                  # Game page (mode selection + gameplay)
+      game/                  # Game page (mode selection + gameplay + realtime)
       lobby/                 # Realtime multiplayer lobby (Supabase Realtime)
       leaderboard/           # Global leaderboard
       history/               # Game history page
-    api/                     # All API route handlers
+    api/                     # All API route handlers (auth, game, words, leaderboard)
   components/
     game/                    # GameResult, QuestionCard, ScoreBoard, Timer
     layout/                  # Header
     providers/               # AuthProvider (checkAuth on mount)
-    ui/                      # Reusable UI primitives (button, card, input, badge, progress)
+    ui/                      # Reusable UI primitives (button, card, input, badge, progress, dialog)
   stores/                    # Zustand stores (authStore, gameStore)
-  hooks/                     # useSpeech (Web Speech API), useTimer (rAF-based)
-  lib/                       # db.ts (Prisma singleton), supabase.ts (Supabase client), utils.ts
+  hooks/                     # useSpeech (audio fallback), useTimer (rAF-based)
+  lib/                       # db.ts (Prisma singleton), supabase.ts (client-only), utils.ts (cn, shuffle)
   types/                     # All TypeScript interfaces
   data/words/                # Word list JSON files (cet4.json, cet6.json, toefl.json, ielts.json)
 prisma/
   schema.prisma              # Database schema (PostgreSQL)
   seed.ts                    # Database seeder
+scripts/
+  download-audio.js          # Download pronunciation audio from Youdao
+  generate-words.js          # Generate word list JSONs
+  import-dict.js             # Import dictionary data
 electron/
   main.ts                    # Electron main process
-netlify.toml                 # Netlify deployment configuration
+netlify.toml                 # Netlify config (runs download-audio.js before build)
 .env.example                 # Environment variables template
 ```
 
@@ -123,3 +130,42 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=...       # Supabase anonymous key
 - `npm run postinstall` runs `prisma generate` automatically after `npm install`
 - ESLint uses flat config (`eslint.config.mjs`), not `.eslintrc`
 - An MCP server for Supabase is configured in `.mcp.json` — provides database tools via Claude Code
+
+## Design System
+
+Warm editorial theme with cream/coral/navy palette defined in `src/app/globals.css` using Tailwind v4's `@theme` directive (not `tailwind.config`):
+- **Colors:** `--color-primary` (coral #cc785c), `--color-canvas` (cream #faf9f5), `--color-surface-dark` (navy #181715)
+- **Typography:** `--font-display` (Cormorant Garamond serif for headlines), `--font-body` (Inter sans-serif)
+- **Semantic colors:** `--color-success`, `--color-error`, `--color-warning` for game feedback
+- Custom Tailwind classes: `bg-canvas`, `text-body`, `text-ink`, `bg-surface-soft`, `border-hairline`, etc.
+
+## Audio System
+
+Pronunciation uses a two-tier fallback in `src/hooks/useSpeech.ts`:
+1. **Local files:** `/public/audio/{word}.mp3` — downloaded via `scripts/download-audio.js`
+2. **Online fallback:** Youdao Dictionary API (`https://dict.youdao.com/dictvoice`)
+
+The Netlify build runs `node scripts/download-audio.js` before `npm run build` to pre-download audio files.
+
+## Game State Machine
+
+`src/stores/gameStore.ts` manages the game lifecycle:
+- **Status transitions:** `waiting` → `playing` → `finished`
+- **Scoring:** 100 base points per correct answer + time bonus (up to 50 points for fast answers within 15s)
+- **Question generation:** Random mix of `en2cn`, `cn2en`, `listening` types from loaded word pool
+- **AI opponent:** Simulated with ~70% accuracy and random response delays
+
+## Realtime Protocol
+
+Supabase Realtime channel events (channel name: `room:{roomId}`):
+- `answer-submitted` — payload: `{ answer, correct, time, score, username }`
+- `player-finished` — payload: `{ username, finalScore, correctCount }`
+- `game-ended` — payload: `{ winner, finalScores }`
+- `room-update` — lobby state changes (player joined/left)
+
+## Utility Scripts
+
+Located in `scripts/`:
+- `generate-words.js` — Generate word list JSON files from dictionary sources
+- `download-audio.js` — Download pronunciation audio files from Youdao API
+- `import-dict.js` — Import dictionary data into word lists

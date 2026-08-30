@@ -1,12 +1,71 @@
 "use client"
 
+import { useState } from "react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { useAuthStore } from "@/stores/authStore"
+import { useSpeech } from "@/hooks/useSpeech"
+import { sound } from "@/lib/sound"
+
+const DEMO_QUESTIONS = [
+  {
+    word: "ubiquitous",
+    phonetic: "/juːˈbɪkwɪtəs/",
+    meaning: "present, appearing, or found everywhere",
+    correct: "无处不在的；普遍存在的",
+    options: ["无处不在的；普遍存在的", "雄心勃勃的；野心勃勃的", "难以捉摸的；模糊不清的", "独一无二的；举世无双的"],
+  },
+  {
+    word: "resilient",
+    phonetic: "/rɪˈzɪliənt/",
+    meaning: "able to withstand or recover quickly from difficult conditions",
+    correct: "有韧性的；能迅速恢复的",
+    options: ["犹豫不决的；摇摆不定的", "有韧性的；能迅速恢复的", "冷漠无情的；麻木不仁的", "极其脆弱的；易碎的"],
+  },
+  {
+    word: "meticulous",
+    phonetic: "/məˈtɪkjələs/",
+    meaning: "showing great attention to detail; very careful and precise",
+    correct: "一丝不苟的；极其细致的",
+    options: ["粗心大意的；鲁莽的", "随心所欲的；任性的", "一丝不苟的；极其细致的", "平淡无奇的；乏味的"],
+  },
+]
 
 export default function Home() {
   const { user } = useAuthStore()
+  const { speak } = useSpeech()
+
+  const [demoIndex, setDemoIndex] = useState(0)
+  const [selectedOption, setSelectedOption] = useState<string | null>(null)
+  const [demoScore, setDemoScore] = useState(140)
+  const [demoCombo, setDemoCombo] = useState(1)
+  const [showFloatingScore, setShowFloatingScore] = useState(false)
+
+  const currentDemo = DEMO_QUESTIONS[demoIndex]
+
+  const handleDemoSelect = (opt: string) => {
+    if (selectedOption) return
+    setSelectedOption(opt)
+
+    if (opt === currentDemo.correct) {
+      sound.playCorrect()
+      setDemoScore((s) => s + 150)
+      setDemoCombo((c) => c + 1)
+      setShowFloatingScore(true)
+      setTimeout(() => setShowFloatingScore(false), 1200)
+    } else {
+      sound.playWrong()
+      setDemoCombo(0)
+    }
+  }
+
+  const handleNextDemo = () => {
+    sound.playClick()
+    setSelectedOption(null)
+    setShowFloatingScore(false)
+    setDemoIndex((prev) => (prev + 1) % DEMO_QUESTIONS.length)
+  }
 
   const features = [
     {
@@ -40,85 +99,165 @@ export default function Home() {
 
   return (
     <div className="min-h-[calc(100vh-4rem)]">
-      {/* Hero Section — Cream canvas with serif headline */}
-      <section className="bg-canvas">
-        <div className="max-w-6xl mx-auto px-4 py-20 md:py-32">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
+      {/* Hero Section */}
+      <section className="bg-canvas relative overflow-hidden">
+        {/* Ambient Glows */}
+        <div className="absolute top-1/4 -left-20 w-72 h-72 bg-primary/10 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute top-1/3 -right-20 w-72 h-72 bg-accent-teal/10 rounded-full blur-3xl pointer-events-none" />
+
+        <div className="max-w-6xl mx-auto px-4 py-16 md:py-24 relative z-10">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
             {/* Left — Text */}
-            <div>
-              <div className="inline-flex items-center gap-2 bg-surface-card rounded-full px-4 py-2 mb-6">
+            <div className="lg:col-span-6 space-y-6">
+              <div className="inline-flex items-center gap-2 bg-surface-card border border-hairline rounded-full px-4 py-1.5 shadow-2xs">
                 <span className="animate-bounce">⚔️</span>
-                <span className="text-sm font-medium text-body-strong">英语单词PK对战平台</span>
+                <span className="text-xs font-semibold text-body-strong tracking-wide">
+                  全新 2.0 极速竞技与错题复习模式
+                </span>
               </div>
-              <h1 className="font-display text-5xl md:text-7xl font-medium text-ink leading-[1.05] tracking-[-0.02em] mb-6">
+
+              <h1 className="font-display text-5xl md:text-7xl font-bold text-ink leading-[1.05] tracking-tight">
                 Word Battle
               </h1>
-              <p className="text-lg md:text-xl text-muted mb-8 max-w-lg leading-relaxed">
-                与朋友一起PK英语单词，在游戏中提升词汇量，让学习变得更有趣！
+
+              <p className="text-lg md:text-xl text-muted leading-relaxed max-w-lg">
+                专为四六级、托福、雅思考生打造的单词竞技对战平台。在毫秒必争的 PK 中强化词汇记忆，告别死记硬背！
               </p>
-              <div className="flex flex-col sm:flex-row gap-3">
+
+              <div className="flex flex-col sm:flex-row gap-3 pt-2">
                 {user ? (
                   <Link href="/game">
-                    <Button size="lg" className="text-base px-8 py-4">
-                      🚀 开始PK
+                    <Button size="lg" className="text-base px-8 py-4 shadow-sm w-full sm:w-auto">
+                      🚀 开启对战
                     </Button>
                   </Link>
                 ) : (
                   <>
-                    <Link href="/register">
-                      <Button size="lg" className="text-base px-8 py-4">
-                        🎮 免费注册
+                    <Link href="/game">
+                      <Button size="lg" className="text-base px-8 py-4 shadow-sm w-full sm:w-auto">
+                        🎮 立即试玩对战
                       </Button>
                     </Link>
-                    <Link href="/login">
-                      <Button size="lg" variant="outline" className="text-base px-8 py-4">
-                        登录账号
+                    <Link href="/register">
+                      <Button size="lg" variant="outline" className="text-base px-8 py-4 w-full sm:w-auto">
+                        免费注册账号
                       </Button>
                     </Link>
                   </>
                 )}
               </div>
-            </div>
 
-            {/* Right — Dark product mockup card */}
-            <div className="hidden lg:block">
-              <div className="bg-surface-dark rounded-xl p-8 text-on-dark">
-                <div className="flex items-center gap-2 mb-6">
-                  <div className="w-3 h-3 rounded-full bg-error/60"></div>
-                  <div className="w-3 h-3 rounded-full bg-warning/60"></div>
-                  <div className="w-3 h-3 rounded-full bg-success/60"></div>
-                  <span className="ml-3 text-on-dark-soft text-xs font-mono">game.tsx</span>
+              {/* Stats Bar */}
+              <div className="grid grid-cols-3 gap-6 pt-6 border-t border-hairline-soft">
+                <div>
+                  <p className="font-display text-3xl font-bold text-ink">18000+</p>
+                  <p className="text-muted text-xs mt-0.5">核心大纲词汇</p>
                 </div>
-                <div className="font-mono text-sm space-y-3 text-on-dark-soft">
-                  <p><span className="text-accent-teal">const</span> <span className="text-on-dark">question</span> = <span className="text-accent-amber">generateQuestion</span>();</p>
-                  <p><span className="text-accent-teal">const</span> <span className="text-on-dark">answer</span> = <span className="text-accent-amber">playerSelect</span>();</p>
-                  <p><span className="text-accent-teal">if</span> (<span className="text-on-dark">answer</span> === <span className="text-on-dark">correct</span>) {'{'}</p>
-                  <p className="pl-4"><span className="text-on-dark">score</span> += <span className="text-accent-amber">100</span>;</p>
-                  <p className="pl-4"><span className="text-on-dark">combo</span>++;</p>
-                  <p>{'}'}</p>
-                  <p className="mt-4 text-success">{"// ✓ 回答正确！+150分"}</p>
+                <div>
+                  <p className="font-display text-3xl font-bold text-ink">4 阶</p>
+                  <p className="text-muted text-xs mt-0.5">真题考试分级</p>
                 </div>
-                <div className="mt-6 pt-4 border-t border-surface-dark-elevated flex items-center justify-between">
-                  <span className="text-xs text-on-dark-soft">Round 7/10</span>
-                  <span className="text-xs text-accent-teal">● 正在对战</span>
+                <div>
+                  <p className="font-display text-3xl font-bold text-primary">0ms</p>
+                  <p className="text-muted text-xs mt-0.5">全键盘极速作答</p>
                 </div>
               </div>
             </div>
-          </div>
 
-          {/* Stats */}
-          <div className="flex justify-start gap-12 mt-16 pt-8 border-t border-hairline-soft">
-            <div>
-              <p className="font-display text-3xl font-medium text-ink">18000+</p>
-              <p className="text-muted text-sm mt-1">核心词汇</p>
-            </div>
-            <div>
-              <p className="font-display text-3xl font-medium text-ink">4种</p>
-              <p className="text-muted text-sm mt-1">词汇级别</p>
-            </div>
-            <div>
-              <p className="font-display text-3xl font-medium text-ink">3种</p>
-              <p className="text-muted text-sm mt-1">题型模式</p>
+            {/* Right — Interactive Live PK Mini Preview */}
+            <div className="lg:col-span-6">
+              <div className="bg-surface-dark text-on-dark rounded-2xl p-6 md:p-8 shadow-2xl border border-surface-dark-elevated relative overflow-hidden">
+                {/* Floating score indicator */}
+                {showFloatingScore && (
+                  <div className="absolute top-8 right-8 animate-float-score font-mono font-black text-xl text-success bg-canvas px-3 py-1 rounded-full border border-success/40 shadow-lg z-30">
+                    +150 分 🔥 Combo x{demoCombo}
+                  </div>
+                )}
+
+                {/* Top status bar */}
+                <div className="flex items-center justify-between border-b border-surface-dark-elevated pb-4 mb-6">
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-full bg-error/80" />
+                    <div className="w-3 h-3 rounded-full bg-warning/80" />
+                    <div className="w-3 h-3 rounded-full bg-success/80" />
+                    <span className="ml-2 text-xs font-mono text-on-dark-soft">LIVE DEMO · 试玩体验</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs font-mono text-accent-teal font-semibold">
+                      得分: {demoScore}
+                    </span>
+                    {demoCombo >= 2 && (
+                      <span className="text-[11px] bg-accent-amber/20 text-accent-amber px-2 py-0.5 rounded-full font-bold animate-combo-pulse">
+                        🔥 {demoCombo} 连击
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Question word prompt */}
+                <div className="text-center py-4 space-y-1">
+                  <div className="flex items-center justify-center gap-2">
+                    <span className="font-display text-3xl md:text-4xl font-bold text-on-dark tracking-tight">
+                      {currentDemo.word}
+                    </span>
+                    <button
+                      onClick={() => speak(currentDemo.word)}
+                      className="p-1.5 rounded-full bg-surface-dark-elevated hover:bg-surface-dark-soft text-primary transition-colors text-sm"
+                      title="点击发音"
+                    >
+                      🔊
+                    </button>
+                  </div>
+                  <p className="text-xs font-mono text-on-dark-soft">{currentDemo.phonetic}</p>
+                </div>
+
+                {/* Options list */}
+                <div className="space-y-2 mt-4">
+                  {currentDemo.options.map((opt, i) => {
+                    const isSelected = selectedOption === opt
+                    const isCorrect = opt === currentDemo.correct
+                    const showCorrect = selectedOption && isCorrect
+                    const showWrong = isSelected && !isCorrect
+                    const letter = String.fromCharCode(65 + i)
+
+                    return (
+                      <button
+                        key={i}
+                        onClick={() => handleDemoSelect(opt)}
+                        disabled={!!selectedOption}
+                        className={`w-full text-left p-3 rounded-xl text-xs md:text-sm font-medium transition-all flex items-center gap-3 border ${
+                          showCorrect
+                            ? "bg-success/20 border-success text-success font-bold"
+                            : showWrong
+                            ? "bg-error/20 border-error text-error font-bold"
+                            : "bg-surface-dark-elevated border-surface-dark-elevated text-on-dark hover:border-primary/40 hover:bg-surface-dark-soft"
+                        }`}
+                      >
+                        <span className="kbd-badge bg-surface-dark text-on-dark-soft border-surface-dark-soft text-[10px]">
+                          {letter}
+                        </span>
+                        <span className="flex-1">{opt}</span>
+                        {showCorrect && <span>✓</span>}
+                        {showWrong && <span>✗</span>}
+                      </button>
+                    )
+                  })}
+                </div>
+
+                {/* Action footer */}
+                <div className="mt-6 pt-4 border-t border-surface-dark-elevated flex items-center justify-between">
+                  <span className="text-[11px] text-on-dark-soft">
+                    {selectedOption ? (selectedOption === currentDemo.correct ? "🎉 答对啦！" : "💡 再接再厉！") : "点击选项即可体验即时音效与得分"}
+                  </span>
+                  <button
+                    onClick={handleNextDemo}
+                    className="text-xs text-primary hover:text-accent-amber font-semibold transition-colors flex items-center gap-1"
+                  >
+                    <span>换一题</span>
+                    <span>→</span>
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -152,8 +291,9 @@ export default function Home() {
           <p className="text-center text-muted mb-12">从基础到高级，循序渐进</p>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-5">
             {levels.map((level) => (
-              <div
+              <Link
                 key={level.name}
+                href="/game"
                 className="group cursor-pointer"
               >
                 <div className="bg-surface-card border border-hairline-soft rounded-lg p-5 md:p-6 transform group-hover:scale-[1.02] transition-transform">
@@ -163,7 +303,7 @@ export default function Home() {
                   <p className="font-display text-xl md:text-2xl font-medium text-ink mb-1">{level.name}</p>
                   <p className="text-muted text-sm">{level.desc}</p>
                 </div>
-              </div>
+              </Link>
             ))}
           </div>
         </div>
@@ -171,12 +311,12 @@ export default function Home() {
 
       {/* CTA — Coral callout band */}
       <section className="max-w-6xl mx-auto px-4 py-20 md:py-24">
-        <div className="bg-primary rounded-xl px-8 py-16 md:px-16 md:py-20 text-center">
-          <h2 className="font-display text-2xl md:text-3xl font-medium text-on-primary mb-4 tracking-tight">准备好挑战了吗？</h2>
-          <p className="text-on-primary/80 mb-8 text-lg">立即开始你的英语单词PK之旅！</p>
+        <div className="bg-primary rounded-xl px-8 py-16 md:px-16 md:py-20 text-center shadow-lg">
+          <h2 className="font-display text-2xl md:text-4xl font-medium text-on-primary mb-4 tracking-tight">准备好挑战了吗？</h2>
+          <p className="text-on-primary/90 mb-8 text-lg">立即开启单词 PK 之旅，让背单词如打游戏般让人上瘾！</p>
           <Link href={user ? "/game" : "/register"}>
-            <Button size="lg" variant="secondary" className="bg-canvas text-ink hover:bg-surface-soft text-base px-10 py-4">
-              {user ? "开始游戏" : "立即注册"}
+            <Button size="lg" variant="secondary" className="bg-canvas text-ink hover:bg-surface-soft text-base px-10 py-4 shadow-sm font-semibold">
+              {user ? "立即开始游戏" : "免费注册加入对战"}
             </Button>
           </Link>
         </div>

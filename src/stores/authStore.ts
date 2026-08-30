@@ -1,24 +1,35 @@
 import { create } from "zustand"
 import type { User } from "@/types"
 
+export interface AuthResult {
+  success: boolean
+  error?: string
+}
+
 interface AuthStore {
   user: User | null
   isLoading: boolean
-  login: (username: string, password: string) => Promise<boolean>
-  register: (username: string, password: string) => Promise<boolean>
+  login: (username: string, password: string) => Promise<AuthResult>
+  register: (username: string, password: string) => Promise<AuthResult>
   logout: () => void
   checkAuth: () => Promise<void>
 }
 
-async function authRequest(url: string, body: object): Promise<User | null> {
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  })
-  if (!res.ok) return null
-  const data = await res.json()
-  return data.user
+async function authRequest(url: string, body: object): Promise<{ user: User | null; error?: string }> {
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) {
+      return { user: null, error: data.error || "请求失败，请稍后重试" }
+    }
+    return { user: data.user }
+  } catch {
+    return { user: null, error: "网络连接异常，请检查网络或稍后重试" }
+  }
 }
 
 export const useAuthStore = create<AuthStore>((set) => ({
@@ -27,29 +38,31 @@ export const useAuthStore = create<AuthStore>((set) => ({
 
   login: async (username, password) => {
     try {
-      const user = await authRequest("/api/auth/login", { username, password })
+      const cleanUsername = username.trim()
+      const { user, error } = await authRequest("/api/auth/login", { username: cleanUsername, password })
       if (user) {
         set({ user })
         localStorage.setItem("userId", user.id)
-        return true
+        return { success: true }
       }
-      return false
+      return { success: false, error: error || "用户名或密码错误" }
     } catch {
-      return false
+      return { success: false, error: "登录失败，请稍后重试" }
     }
   },
 
   register: async (username, password) => {
     try {
-      const user = await authRequest("/api/auth/register", { username, password })
+      const cleanUsername = username.trim()
+      const { user, error } = await authRequest("/api/auth/register", { username: cleanUsername, password })
       if (user) {
         set({ user })
         localStorage.setItem("userId", user.id)
-        return true
+        return { success: true }
       }
-      return false
+      return { success: false, error: error || "注册失败，请稍后重试" }
     } catch {
-      return false
+      return { success: false, error: "注册失败，请稍后重试" }
     }
   },
 
@@ -73,8 +86,12 @@ export const useAuthStore = create<AuthStore>((set) => ({
       if (res.ok) {
         const data = await res.json()
         set({ user: data.user, isLoading: false })
-      } else {
+      } else if (res.status === 404) {
+        // User strictly deleted or doesn't exist
         localStorage.removeItem("userId")
+        set({ user: null, isLoading: false })
+      } else {
+        // Database timeout or 500 error - don't remove userId, allow retry
         set({ isLoading: false })
       }
     } catch {

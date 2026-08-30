@@ -13,12 +13,12 @@ export async function POST(req: NextRequest) {
 
     const user = await prisma.user.findUnique({ where: { username } })
     if (!user) {
-      return apiError("用户名或密码错误", 401)
+      return apiError("用户不存在，请先注册", 401)
     }
 
     const isValidPassword = await bcrypt.compare(password, user.password)
     if (!isValidPassword) {
-      return apiError("用户名或密码错误", 401)
+      return apiError("密码错误，请重新输入", 401)
     }
 
     return apiSuccess({

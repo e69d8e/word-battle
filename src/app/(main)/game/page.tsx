@@ -15,19 +15,32 @@ import { getSupabase } from "@/lib/supabase"
 import type { RealtimeChannel } from "@supabase/supabase-js"
 import { generateQuestions } from "@/lib/questions"
 import { useWords } from "@/hooks/useWords"
+import { sound } from "@/lib/sound"
 import type { GameMode, WordLevel, GameResult as GameResultType } from "@/types"
 
 export default function GamePage() {
   const { user } = useAuthStore()
   const {
     mode, status, questions, currentIndex,
-    score1, score2, answers1,
+    score1, score2, combo1, combo2, lastScoreGained1, lastScoreGained2, answers1,
     initGame, submitAnswer, nextQuestion, finishGame, resetGame
   } = useGameStore()
 
   const [selectedMode, setSelectedMode] = useState<GameMode>("ai")
   const [selectedLevel, setSelectedLevel] = useState<WordLevel>("CET4")
   const { words, isLoading } = useWords(selectedLevel)
+  const wordsRef = useRef(words)
+  const selectedLevelRef = useRef(selectedLevel)
+  const [matchCountdown, setMatchCountdown] = useState<number | null>(null)
+
+  useEffect(() => {
+    wordsRef.current = words
+  }, [words])
+
+  useEffect(() => {
+    selectedLevelRef.current = selectedLevel
+  }, [selectedLevel])
+
   const [totalQuestions] = useState(10)
   const [timerKey, setTimerKey] = useState(0)
   const [result, setResult] = useState<GameResultType | null>(null)
@@ -107,11 +120,29 @@ export default function GamePage() {
       ? (opponentUsernameRef.current || "对手")
       : "AI 机器人"
 
+    const finalMaxCombo1 = finalState.maxCombo1
+    const finalMaxCombo2 = finalState.maxCombo2
+
+    const answers1Arr = Object.values(finalAnswers1)
+    const answers2Arr = Object.values(finalAnswers2)
+    const accuracy1 = answers1Arr.length > 0 ? Math.round((answers1Arr.filter((a) => a.correct).length / finalQuestions.length) * 100) : 0
+    const accuracy2 = answers2Arr.length > 0 ? Math.round((answers2Arr.filter((a) => a.correct).length / finalQuestions.length) * 100) : 0
+    const avgTime1 = answers1Arr.length > 0 ? Number((answers1Arr.reduce((acc, curr) => acc + curr.time, 0) / (answers1Arr.length * 1000)).toFixed(1)) : 0
+    const avgTime2 = answers2Arr.length > 0 ? Number((answers2Arr.reduce((acc, curr) => acc + curr.time, 0) / (answers2Arr.length * 1000)).toFixed(1)) : 0
+
+    const isWinner = finalScore1 > finalScore2
+    const isLoser = finalScore2 > finalScore1
+    if (isWinner) {
+      sound.playVictory()
+    } else if (isLoser) {
+      sound.playDefeat()
+    }
+
     const gameResult: GameResultType = {
       gameId: Date.now().toString(),
       mode: finalMode,
-      player1: { username: p1Username, score: finalScore1 },
-      player2: { username: p2Username, score: finalScore2 },
+      player1: { username: p1Username, score: finalScore1, maxCombo: finalMaxCombo1, accuracy: accuracy1, avgTime: avgTime1 },
+      player2: { username: p2Username, score: finalScore2, maxCombo: finalMaxCombo2, accuracy: accuracy2, avgTime: avgTime2 },
       winner:
         finalScore1 > finalScore2
           ? p1Username
@@ -120,6 +151,10 @@ export default function GamePage() {
           : null,
       questions: finalQuestions.map((q) => ({
         word: q.word.word,
+        phonetic: q.word.phonetic,
+        meaningCn: q.word.meaningCn,
+        meaning: q.word.meaning,
+        example: q.word.example,
         type: q.type,
         correct1: finalAnswers1[q.id]?.correct || false,
         correct2: finalMode === "realtime"
@@ -249,16 +284,16 @@ export default function GamePage() {
     selfFinishedRef.current = false
   }
 
-  const startRematch = () => {
+  const startRematch = useCallback(() => {
     console.log("[Rematch] Starting rematch, isHost:", isHostRef.current)
     resetAllRematchState()
 
     if (isHostRef.current) {
-      if (words.length < 10) {
+      if (wordsRef.current.length < 10) {
         console.error("[Rematch] Not enough words")
         return
       }
-      const presetQuestions = generateQuestions(words, totalQuestions)
+      const presetQuestions = generateQuestions(wordsRef.current, totalQuestions)
 
       if (channelRef.current) {
         channelRef.current.send({
@@ -271,9 +306,14 @@ export default function GamePage() {
       resetGame()
       setResult(null)
       setTimerKey((k) => k + 1)
-      initGame("realtime", selectedLevel, words, totalQuestions, presetQuestions)
+      initGame("realtime", selectedLevelRef.current, wordsRef.current, totalQuestions, presetQuestions)
     }
-  }
+  }, [totalQuestions, initGame, resetGame])
+
+  const startRematchRef = useRef(startRematch)
+  useEffect(() => {
+    startRematchRef.current = startRematch
+  }, [startRematch])
 
   // Subscribe to realtime channel for multiplayer answer sync
   useEffect(() => {
@@ -372,7 +412,7 @@ export default function GamePage() {
           // If self also requested rematch, start the new game
           if (rematchRequestedRef.current) {
             console.log("[Realtime] Both players want rematch, starting new game")
-            startRematch()
+            startRematchRef.current()
           }
         }
       })
@@ -385,7 +425,7 @@ export default function GamePage() {
           resetGame()
           setResult(null)
           setTimerKey((k) => k + 1)
-          initGame("realtime", selectedLevel, words, total, presetQuestions)
+          initGame("realtime", selectedLevelRef.current, wordsRef.current, total, presetQuestions)
         }
       })
       .on("broadcast", { event: "player-left" }, ({ payload }) => {
@@ -414,7 +454,7 @@ export default function GamePage() {
         supabase.removeChannel(channel)
       }
     }
-  }, [mode, user?.id, finishGame, handleGameEnd])
+  }, [mode, user?.id, finishGame, handleGameEnd, initGame, resetGame])
 
   const currentQuestion = questions[currentIndex]
   const hasAnswered = currentQuestion ? !!answers1[currentQuestion.id] : false
@@ -502,13 +542,37 @@ export default function GamePage() {
       setShowLoadingDialog(true)
       return
     }
+
     resetAllRematchState()
     opponentUsernameRef.current = ""
     setOpponentUsername("")
     resetGame()
     setResult(null)
-    setTimerKey((k) => k + 1)
-    initGame(selectedMode, selectedLevel, words, totalQuestions)
+
+    // Run exciting 3-2-1 countdown before starting round
+    setMatchCountdown(3)
+    sound.playCountdownTick(false)
+
+    setTimeout(() => {
+      setMatchCountdown(2)
+      sound.playCountdownTick(false)
+
+      setTimeout(() => {
+        setMatchCountdown(1)
+        sound.playCountdownTick(false)
+
+        setTimeout(() => {
+          setMatchCountdown(0) // "GO!"
+          sound.playCountdownTick(true)
+
+          setTimeout(() => {
+            setMatchCountdown(null)
+            setTimerKey((k) => k + 1)
+            initGame(selectedMode, selectedLevel, words, totalQuestions)
+          }, 500)
+        }, 750)
+      }, 750)
+    }, 750)
   }
 
   const playAgain = () => {
@@ -535,7 +599,7 @@ export default function GamePage() {
   }
 
   // Mode selection screen
-  if (status === "waiting" && !result) {
+  if (status === "waiting" && !result && matchCountdown === null) {
     return (
       <div className="max-w-4xl mx-auto px-4 py-16">
         <h1 className="font-display text-3xl md:text-4xl font-medium text-center text-ink mb-2 tracking-tight">选择对战模式</h1>
@@ -629,7 +693,7 @@ export default function GamePage() {
             {isLoading ? "加载单词中..." : "🚀 开始挑战"}
           </Button>
           <p className="text-sm text-muted mt-3">
-            共 {totalQuestions} 题 · 每题 {questionTimeLimit} 秒
+            共 {totalQuestions} 题 · 每题 {questionTimeLimit} 秒 · 支持全键盘快捷键
           </p>
         </div>
 
@@ -650,6 +714,24 @@ export default function GamePage() {
           description="单词库加载中，请稍候..."
           confirmText="知道了"
         />
+      </div>
+    )
+  }
+
+  // Pre-game 3-2-1 countdown screen
+  if (matchCountdown !== null) {
+    return (
+      <div className="min-h-[calc(100vh-8rem)] flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <p className="text-muted text-lg tracking-wider uppercase font-medium">对战即将开始</p>
+          <div
+            key={matchCountdown}
+            className="w-32 h-32 md:w-40 md:h-40 mx-auto rounded-full bg-gradient-to-tr from-primary to-accent-amber text-on-primary flex items-center justify-center text-6xl md:text-7xl font-display font-black shadow-lg animate-countdown-pop"
+          >
+            {matchCountdown === 0 ? "GO!" : matchCountdown}
+          </div>
+          <p className="text-sm text-muted-soft font-mono">准备好按下按键 A / B / C / D</p>
+        </div>
       </div>
     )
   }
@@ -702,12 +784,12 @@ export default function GamePage() {
     <div className="max-w-3xl mx-auto px-4 py-8">
       {/* Waiting for opponent overlay */}
       {isWaitingForOpponent && (
-        <div className="fixed inset-0 bg-ink/50 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-ink/50 backdrop-blur-xs flex items-center justify-center z-50 animate-countdown-pop">
           <Card className="max-w-sm mx-4">
             <CardContent className="p-8 text-center">
               <div className="animate-spin w-12 h-12 border-4 border-primary border-t-transparent rounded-full mx-auto mb-4" />
               <h3 className="font-display text-lg font-medium text-ink mb-2">等待对手完成</h3>
-              <p className="text-muted">你已完成所有题目，正在等待对手...</p>
+              <p className="text-muted text-sm">你已完成所有题目，正在等待对手最后一击...</p>
             </CardContent>
           </Card>
         </div>
@@ -716,11 +798,20 @@ export default function GamePage() {
       {/* Score Board */}
       <div className="mb-6">
         <ScoreBoard
-          player1={{ name: user?.username || "玩家1", score: score1, correctCount: player1CorrectCount, isMe: true }}
+          player1={{
+            name: user?.username || "玩家1",
+            score: score1,
+            correctCount: player1CorrectCount,
+            combo: combo1,
+            lastScoreGained: lastScoreGained1,
+            isMe: true,
+          }}
           player2={{
             name: mode === "ai" ? "AI 机器人" : (opponentUsername || "玩家2"),
             score: score2,
             correctCount: player2CorrectCount,
+            combo: combo2,
+            lastScoreGained: lastScoreGained2,
             isMe: false,
           }}
           currentQuestion={currentIndex + 1}
@@ -737,8 +828,8 @@ export default function GamePage() {
       </div>
 
       {/* Question */}
-      <Card>
-        <CardContent className="p-8">
+      <Card className="shadow-sm border-hairline bg-surface-card/95 backdrop-blur-sm">
+        <CardContent className="p-6 md:p-8">
           <QuestionCard
             key={currentQuestion.id}
             question={currentQuestion}

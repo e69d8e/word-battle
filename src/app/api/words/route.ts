@@ -25,9 +25,26 @@ export async function GET(req: NextRequest) {
       return apiError("未找到对应级别的单词库", 404)
     }
 
+    const cacheHeaders = {
+      "Cache-Control": "public, max-age=3600, s-maxage=86400, stale-while-revalidate=86400",
+    }
+
     const dbWordList = await prisma.wordList.findFirst({
       where: { level },
-      include: { words: true },
+      select: {
+        id: true,
+        name: true,
+        words: {
+          select: {
+            id: true,
+            word: true,
+            phonetic: true,
+            meaning: true,
+            meaningCn: true,
+            example: true,
+          },
+        },
+      },
     })
 
     if (!dbWordList || dbWordList.words.length === 0) {
@@ -63,7 +80,7 @@ export async function GET(req: NextRequest) {
           meaningCn: w.meaningCn,
           example: w.example || null,
         })),
-      })
+      }, { headers: cacheHeaders })
     }
 
     return apiSuccess({
@@ -72,17 +89,32 @@ export async function GET(req: NextRequest) {
         level,
         wordCount: dbWordList.words.length,
       },
-      words: dbWordList.words.map((w) => ({
-        id: w.id,
+      words: dbWordList.words,
+    }, { headers: cacheHeaders })
+  } catch (error) {
+    console.error("Get words error (falling back to local data):", error)
+    const { searchParams } = new URL(req.url)
+    const level = (searchParams.get("level") || "CET4") as WordLevel
+    const wordData = wordDataMap[level] || wordDataMap.CET4
+
+    return apiSuccess({
+      wordList: {
+        name: wordData.name,
+        level,
+        wordCount: wordData.data.length,
+      },
+      words: wordData.data.map((w, i) => ({
+        id: `local-${level}-${i}`,
         word: w.word,
-        phonetic: w.phonetic,
+        phonetic: w.phonetic || null,
         meaning: w.meaning,
         meaningCn: w.meaningCn,
-        example: w.example,
+        example: w.example || null,
       })),
+    }, {
+      headers: {
+        "Cache-Control": "public, max-age=1800, s-maxage=3600, stale-while-revalidate=86400",
+      },
     })
-  } catch (error) {
-    console.error("Get words error:", error)
-    return apiError("获取单词失败")
   }
 }

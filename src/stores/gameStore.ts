@@ -22,6 +22,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
   currentIndex: 0,
   score1: 0,
   score2: 0,
+  combo1: 0,
+  combo2: 0,
+  maxCombo1: 0,
+  maxCombo2: 0,
+  lastScoreGained1: 0,
+  lastScoreGained2: 0,
   answers1: {},
   answers2: {},
   startTime: 0,
@@ -38,6 +44,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
       currentIndex: 0,
       score1: 0,
       score2: 0,
+      combo1: 0,
+      combo2: 0,
+      maxCombo1: 0,
+      maxCombo2: 0,
+      lastScoreGained1: 0,
+      lastScoreGained2: 0,
       answers1: {},
       answers2: {},
       startTime: Date.now(),
@@ -55,11 +67,21 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (state[answersKey][question.id]) return false
 
     const isCorrect = answer === question.correctAnswer
+    const currentCombo = player === 1 ? state.combo1 : state.combo2
+    const nextCombo = isCorrect ? currentCombo + 1 : 0
+    const currentMaxCombo = player === 1 ? state.maxCombo1 : state.maxCombo2
+    const nextMaxCombo = Math.max(currentMaxCombo, nextCombo)
+
+    // Scoring: Base 100 + Time bonus (up to 50) + Combo bonus (10 * (nextCombo - 1) if combo >= 2)
     const baseScore = isCorrect ? 100 : 0
     const timeBonus = isCorrect ? Math.max(0, Math.floor((15000 - timeMs) / 100)) : 0
-    const totalScore = baseScore + timeBonus
+    const comboBonus = isCorrect && nextCombo >= 2 ? Math.min(50, (nextCombo - 1) * 10) : 0
+    const totalScore = baseScore + timeBonus + comboBonus
 
     const scoreKey = player === 1 ? "score1" : "score2"
+    const comboKey = player === 1 ? "combo1" : "combo2"
+    const maxComboKey = player === 1 ? "maxCombo1" : "maxCombo2"
+    const lastScoreGainedKey = player === 1 ? "lastScoreGained1" : "lastScoreGained2"
 
     set({
       [answersKey]: {
@@ -67,6 +89,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
         [question.id]: { answer, correct: isCorrect, time: timeMs },
       },
       [scoreKey]: state[scoreKey] + totalScore,
+      [comboKey]: nextCombo,
+      [maxComboKey]: nextMaxCombo,
+      [lastScoreGainedKey]: isCorrect ? totalScore : 0,
     })
 
     return isCorrect
@@ -78,6 +103,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
       set({
         currentIndex: state.currentIndex + 1,
         questionStartTime: Date.now(),
+        lastScoreGained1: 0,
+        lastScoreGained2: 0,
       })
     }
   },
@@ -95,6 +122,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
       currentIndex: 0,
       score1: 0,
       score2: 0,
+      combo1: 0,
+      combo2: 0,
+      maxCombo1: 0,
+      maxCombo2: 0,
+      lastScoreGained1: 0,
+      lastScoreGained2: 0,
       answers1: {},
       answers2: {},
       startTime: 0,

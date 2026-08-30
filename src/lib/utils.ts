@@ -15,5 +15,30 @@ export function shuffleArray<T>(array: T[]): T[] {
 }
 
 export function getRandomItems<T>(array: T[], count: number): T[] {
-  return shuffleArray(array).slice(0, count)
+  const n = array.length
+  if (count <= 0 || n === 0) return []
+  if (count >= n) return shuffleArray(array)
+
+  const result: T[] = []
+  const pickedIndices = new Set<number>()
+  while (pickedIndices.size < count) {
+    const idx = Math.floor(Math.random() * n)
+    if (!pickedIndices.has(idx)) {
+      pickedIndices.add(idx)
+      result.push(array[idx])
+    }
+  }
+  return result
 }
+
+export function generateId(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID()
+  }
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0
+    const v = c === "x" ? r : (r & 0x3) | 0x8
+    return v.toString(16)
+  })
+}
+

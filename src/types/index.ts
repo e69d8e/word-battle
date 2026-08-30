@@ -43,6 +43,12 @@ export interface GameState {
   currentIndex: number
   score1: number
   score2: number
+  combo1: number
+  combo2: number
+  maxCombo1: number
+  maxCombo2: number
+  lastScoreGained1: number
+  lastScoreGained2: number
   answers1: Record<string, { answer: string; correct: boolean; time: number }>
   answers2: Record<string, { answer: string; correct: boolean; time: number }>
   startTime: number
@@ -52,11 +58,15 @@ export interface GameState {
 export interface GameResult {
   gameId: string
   mode: GameMode
-  player1: { username: string; score: number }
-  player2: { username: string; score: number }
+  player1: { username: string; score: number; maxCombo?: number; accuracy?: number; avgTime?: number }
+  player2: { username: string; score: number; maxCombo?: number; accuracy?: number; avgTime?: number }
   winner: string | null
   questions: {
     word: string
+    phonetic?: string | null
+    meaningCn?: string
+    meaning?: string
+    example?: string | null
     type: QuestionType
     correct1: boolean
     correct2: boolean

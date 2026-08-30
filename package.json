@@ -4,11 +4,11 @@
   "private": true,
   "main": "electron/main.ts",
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev --webpack",
     "build": "prisma generate && next build",
     "start": "next start",
     "lint": "eslint",
-    "electron-dev": "concurrently \"next dev\" \"wait-on http://localhost:3000 && electron .\"",
+    "electron-dev": "concurrently \"next dev --webpack\" \"wait-on http://localhost:3000 && electron .\"",
     "electron-build": "next build && electron-builder",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
@@ -38,13 +38,15 @@
     "@types/react-dom": "^19",
     "@types/uuid": "^10.0.0",
     "adm-zip": "^0.5.17",
+    "concurrently": "^10.0.5",
     "electron": "^42.3.2",
     "electron-builder": "^26.8.1",
     "electron-is-dev": "^3.0.1",
     "eslint": "^9",
     "eslint-config-next": "16.2.6",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "wait-on": "^9.1.0"
   },
   "build": {
     "appId": "com.wordbattle.app",

@@ -37,6 +37,8 @@ model Word {
   wordListId    String
   gameQuestions GameQuestion[]
   wordList      WordList       @relation(fields: [wordListId], references: [id])
+
+  @@index([wordListId])
 }
 
 model Game {
@@ -56,6 +58,10 @@ model Game {
   player2    User?          @relation("Player2", fields: [player2Id], references: [id])
   winner     User?          @relation("Winner", fields: [winnerId], references: [id])
   questions  GameQuestion[]
+
+  @@index([player1Id])
+  @@index([player2Id])
+  @@index([createdAt(sort: Desc)])
 }
 
 model GameQuestion {
@@ -72,6 +78,8 @@ model GameQuestion {
   time2    Int?
   game     Game    @relation(fields: [gameId], references: [id], onDelete: Cascade)
   word     Word?   @relation(fields: [wordId], references: [id])
+
+  @@index([gameId])
 }
 
 model Score {
@@ -83,5 +91,6 @@ model Score {
   createdAt DateTime @default(now())
   user      User     @relation(fields: [userId], references: [id])
 
+  @@index([mode, level, score(sort: Desc)])
   @@index([userId, mode, level])
 }

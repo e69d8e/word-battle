@@ -11,19 +11,23 @@ export function generateQuestion(word: WordItem, allWords: WordItem[]): Question
   if (type === "en2cn") {
     correctAnswer = word.meaningCn
     const otherMeanings = [...new Set(
-      allWords.filter((w) => w.id !== word.id).map((w) => w.meaningCn)
+      allWords
+        .filter((w) => w.meaningCn.trim() !== word.meaningCn.trim())
+        .map((w) => w.meaningCn)
     )]
     options = [correctAnswer, ...getRandomItems(otherMeanings, 3)]
   } else {
     // cn2en and listening share the same logic
     correctAnswer = word.word
     const otherWords = [...new Set(
-      allWords.filter((w) => w.id !== word.id).map((w) => w.word)
+      allWords
+        .filter((w) => w.word.toLowerCase().trim() !== word.word.toLowerCase().trim())
+        .map((w) => w.word)
     )]
     options = [correctAnswer, ...getRandomItems(otherWords, 3)]
   }
 
-  // Deduplicate options (correct answer may appear in distractors if meanings overlap)
+  // Deduplicate options
   options = [...new Set(options)]
 
   // Ensure minimum 4 options (pad with placeholders if word pool is too small)
@@ -33,8 +37,9 @@ export function generateQuestion(word: WordItem, allWords: WordItem[]): Question
 
   options = shuffleArray(options)
 
+  const uid = Math.random().toString(36).substring(2, 7)
   return {
-    id: word.id + "-" + type,
+    id: `${word.id}-${type}-${uid}`,
     word,
     type,
     options,

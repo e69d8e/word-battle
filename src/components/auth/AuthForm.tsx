@@ -10,6 +10,9 @@ interface AuthField {
   label: string
   type: string
   placeholder: string
+  autoCapitalize?: string
+  autoCorrect?: string
+  autoComplete?: string
 }
 
 interface AuthFormProps {
@@ -58,10 +61,11 @@ export function AuthForm({
       const result = await onSubmit(values)
       if (result !== true) {
         setError(typeof result === "string" ? result : "操作失败，请稍后重试")
+        setIsLoading(false)
       }
+      // If result === true, keep isLoading true so button shows loading during page redirect
     } catch {
       setError("操作失败，请稍后重试")
-    } finally {
       setIsLoading(false)
     }
   }
@@ -92,6 +96,10 @@ export function AuthForm({
                   id={field.id}
                   type={field.type}
                   placeholder={field.placeholder}
+                  autoCapitalize={field.autoCapitalize}
+                  autoCorrect={field.autoCorrect}
+                  autoComplete={field.autoComplete}
+                  spellCheck={false}
                   value={values[field.id]}
                   onChange={(e) => setValues((prev) => ({ ...prev, [field.id]: e.target.value }))}
                   required

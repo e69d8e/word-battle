@@ -13,6 +13,8 @@ import { getSupabase } from "@/lib/supabase"
 import type { RealtimeChannel } from "@supabase/supabase-js"
 import { generateQuestions } from "@/lib/questions"
 import { useWords } from "@/hooks/useWords"
+import { generateId } from "@/lib/utils"
+import { sound } from "@/lib/sound"
 import type { WordLevel, Question } from "@/types"
 
 interface Player {
@@ -36,24 +38,39 @@ export default function LobbyPage() {
   const channelRef = useRef<RealtimeChannel | null>(null)
   const joinTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // Restore playerId from localStorage to survive page navigation
   const [playerId] = useState<string>(() => {
     if (typeof window !== "undefined") {
       const saved = localStorage.getItem("lobbyPlayerId")
       if (saved) return saved
     }
-    const id = crypto.randomUUID()
+    const id = generateId()
     if (typeof window !== "undefined") localStorage.setItem("lobbyPlayerId", id)
     return id
   })
   const playerIdRef = useRef<string>(playerId)
   const roomRef = useRef<RoomState | null>(null)
 
+  const [activeTab, setActiveTab] = useState<"create" | "join">(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search)
+      if (params.get("join") || params.get("room")) return "join"
+    }
+    return "create"
+  })
   const [roomId, setRoomId] = useState("")
-  const [joinRoomId, setJoinRoomId] = useState("")
+  const [joinRoomId, setJoinRoomId] = useState(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search)
+      const code = params.get("join") || params.get("room")
+      if (code) return code.toUpperCase()
+    }
+    return ""
+  })
   const [room, setRoom] = useState<RoomState | null>(null)
   const [status, setStatus] = useState<"idle" | "creating" | "joining" | "waiting" | "playing">("idle")
   const [error, setError] = useState("")
+  const [copyToast, setCopyToast] = useState<string | null>(null)
+
   const [selectedLevel, setSelectedLevel] = useState<WordLevel>(() => {
     if (typeof window !== "undefined") {
       return (localStorage.getItem("lobbyLevel") as WordLevel) || "CET4"
@@ -95,6 +112,16 @@ export default function LobbyPage() {
     }
   }, [])
 
+  const copyToClipboard = (text: string, msg: string) => {
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(text).then(() => {
+        setCopyToast(msg)
+        sound.playClick()
+        setTimeout(() => setCopyToast(null), 2500)
+      })
+    }
+  }
+
   const subscribeToRoom = useCallback((rid: string) => {
     const supabase = getSupabase()
     if (!supabase) {
@@ -108,7 +135,6 @@ export default function LobbyPage() {
       },
     })
 
-    // Helper to update both state and ref
     const updateRoom = (newRoom: RoomState | null) => {
       roomRef.current = newRoom
       setRoom(newRoom)
@@ -116,7 +142,6 @@ export default function LobbyPage() {
 
     channel
       .on("broadcast", { event: "room-update" }, ({ payload }) => {
-        // Host responded — room exists, cancel the join timeout
         if (joinTimeoutRef.current) {
           clearTimeout(joinTimeoutRef.current)
           joinTimeoutRef.current = null
@@ -128,13 +153,13 @@ export default function LobbyPage() {
         setStatus("playing")
       })
       .on("broadcast", { event: "game-started" }, ({ payload }) => {
-        // Skip if this client is the host (already initialized locally in handleStartGame)
         if (isHostRef.current) {
           isHostRef.current = false
           return
         }
-        const currentRoom = roomRef.current || room
+        const currentRoom = roomRef.current
         const opponent = currentRoom?.players.find((p) => p.id !== playerIdRef.current)?.username || ""
+        sound.playGameStart()
         initGame("realtime", selectedLevel, wordsRef.current, payload.totalQuestions, payload.questions)
         router.push(`/game?roomId=${rid}&opponent=${encodeURIComponent(opponent)}`)
       })
@@ -143,7 +168,6 @@ export default function LobbyPage() {
         setError("对手已离开房间")
       })
       .on("broadcast", { event: "request-state" }, ({ payload }) => {
-        // Host responds to state requests, adding the new player
         const currentRoom = roomRef.current
         if (currentRoom) {
           const playerExists = currentRoom.players.some((p) => p.id === payload.playerId)
@@ -164,15 +188,7 @@ export default function LobbyPage() {
           })
         }
       })
-      .on("presence", { event: "sync" }, () => {
-        const state = channel.presenceState<Player>()
-        console.log("Presence sync:", state)
-      })
-      .subscribe(async (status) => {
-        if (status === "SUBSCRIBED") {
-          console.log(`Subscribed to room:${rid}`)
-        }
-      })
+      .subscribe()
 
     channelRef.current = channel
     return channel
@@ -181,6 +197,7 @@ export default function LobbyPage() {
   const handleCreateRoom = useCallback(async () => {
     if (!user) return
     setStatus("creating")
+    sound.playClick()
 
     const newRoomId = Math.random().toString(36).substring(2, 8).toUpperCase()
     const newRoom: RoomState = {
@@ -196,7 +213,6 @@ export default function LobbyPage() {
 
     const channel = subscribeToRoom(newRoomId)
 
-    // Wait for subscription to be ready
     await new Promise<void>((resolve) => {
       const check = setInterval(() => {
         if (channel.state === "joined") {
@@ -204,18 +220,15 @@ export default function LobbyPage() {
           resolve()
         }
       }, 100)
-      // Timeout after 3 seconds
       setTimeout(() => { clearInterval(check); resolve() }, 3000)
     })
 
-    // Track presence
     await channel.track({
       id: playerIdRef.current,
       username: user.username,
       ready: false,
     })
 
-    // Broadcast room creation
     await channel.send({
       type: "broadcast",
       event: "room-update",
@@ -226,13 +239,13 @@ export default function LobbyPage() {
   const handleJoinRoom = useCallback(async () => {
     if (!user || !joinRoomId) return
     setStatus("joining")
+    sound.playClick()
 
-    const rid = joinRoomId.toUpperCase()
+    const rid = joinRoomId.toUpperCase().trim()
     setRoomId(rid)
 
     const channel = subscribeToRoom(rid)
 
-    // Wait for subscription to be ready
     await new Promise<void>((resolve) => {
       const check = setInterval(() => {
         if (channel.state === "joined") {
@@ -240,18 +253,15 @@ export default function LobbyPage() {
           resolve()
         }
       }, 100)
-      // Timeout after 3 seconds
       setTimeout(() => { clearInterval(check); resolve() }, 3000)
     })
 
-    // Track presence
     await channel.track({
       id: playerIdRef.current,
       username: user.username,
       ready: false,
     })
 
-    // Request room state from host
     await channel.send({
       type: "broadcast",
       event: "request-state",
@@ -261,12 +271,10 @@ export default function LobbyPage() {
     setStatus("waiting")
     setError("")
 
-    // If no host responds within 5 seconds, the room doesn't exist
     joinTimeoutRef.current = setTimeout(() => {
       joinTimeoutRef.current = null
-      setError("房间不存在，请检查房间号是否正确")
+      setError("房间不存在或对手已离线，请检查房间号")
       setStatus("idle")
-      // Clean up the channel
       if (channelRef.current) {
         const supabase = getSupabase()
         if (supabase) supabase.removeChannel(channelRef.current)
@@ -279,6 +287,7 @@ export default function LobbyPage() {
 
   const handleReady = useCallback(async () => {
     if (!channelRef.current || !roomId || !user) return
+    sound.playClick()
 
     const updatedPlayers = room?.players.map((p) =>
       p.id === playerIdRef.current ? { ...p, ready: true } : p
@@ -302,200 +311,301 @@ export default function LobbyPage() {
   const handleStartGame = useCallback(async () => {
     if (!channelRef.current || !roomId || words.length < 10) return
 
-    // Select random questions using shared generator
     const questions = generateQuestions(words, 10)
-
-    // Mark as host before broadcasting so the broadcast handler skips re-init
     isHostRef.current = true
 
-    // Broadcast game start
     await channelRef.current.send({
       type: "broadcast",
       event: "game-started",
       payload: { questions, totalQuestions: questions.length },
     })
 
+    sound.playGameStart()
     const opponent = room?.players.find((p) => p.id !== playerIdRef.current)?.username || ""
-    // Also start locally with the same preset questions
     initGame("realtime", selectedLevel, words, questions.length, questions)
-    // Navigate to game with room ID and host flag in URL
     router.push(`/game?roomId=${roomId}&isHost=true&opponent=${encodeURIComponent(opponent)}`)
   }, [roomId, words, initGame, router, selectedLevel, room])
 
-  // Compute derived state outside of JSX to avoid ref access during render
   const isCurrentUserReady = room?.players.find((p) => p.id === playerId)?.ready ?? false
 
   if (isLoading) {
     return (
-      <div className="max-w-4xl mx-auto px-4 py-16 text-center">
-        <div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full mx-auto mb-4" />
-        <p className="text-muted">加载中...</p>
+      <div className="max-w-4xl mx-auto px-4 py-20 text-center">
+        <div className="animate-spin w-10 h-10 border-4 border-primary border-t-transparent rounded-full mx-auto mb-4" />
+        <p className="text-muted text-sm">连接对战服务器中...</p>
       </div>
     )
   }
 
   if (!user) {
     return (
-      <div className="max-w-4xl mx-auto px-4 py-16 text-center">
-        <p className="text-muted">请先登录</p>
+      <div className="max-w-4xl mx-auto px-4 py-20 text-center">
+        <p className="text-muted mb-4">请先登录后再进入实时对战</p>
         <AlertDialog
           open={showLoginDialog}
           onClose={() => {
             setShowLoginDialog(false)
             router.push("/login")
           }}
-          title="提示"
-          description="请先登录后再进入实时对战"
-          confirmText="去登录"
+          title="需要登录"
+          description="登录后即可创建或加入对战房间，记录天梯排位！"
+          confirmText="前往登录"
         />
       </div>
     )
   }
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-16">
-      <h1 className="font-display text-3xl md:text-4xl font-medium text-center text-ink mb-2 tracking-tight">实时对战</h1>
-      <p className="text-center text-muted mb-12">创建或加入房间，与好友实时PK</p>
+    <div className="max-w-3xl mx-auto px-4 py-12 md:py-16">
+      <div className="text-center mb-10">
+        <span className="text-xs font-mono font-semibold text-primary bg-primary/10 px-3 py-1 rounded-full border border-primary/20">
+          ⚡ MULTIPLAYER ARENA
+        </span>
+        <h1 className="font-display text-3xl md:text-5xl font-bold text-ink mt-3 mb-2 tracking-tight">
+          实时在线对战
+        </h1>
+        <p className="text-muted text-sm md:text-base">与好友或同学实时同屏比拼单词储备与手速</p>
+      </div>
 
       {error && (
-        <div className="mb-6 p-4 bg-error/10 border border-error/20 rounded-lg text-error">
-          {error}
+        <div className="mb-6 p-4 bg-error/10 border border-error/20 rounded-xl text-error text-sm flex items-center justify-between animate-shake">
+          <span>⚠️ {error}</span>
+          <button onClick={() => setError("")} className="text-xs underline font-medium">关闭</button>
+        </div>
+      )}
+
+      {copyToast && (
+        <div className="mb-6 p-3 bg-success/15 border border-success/30 rounded-xl text-success text-sm text-center font-medium animate-countdown-pop">
+          {copyToast}
         </div>
       )}
 
       {status === "idle" && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-          {/* Create Room */}
-          <Card>
-            <CardHeader>
-              <CardTitle>创建房间</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-muted mb-5">创建一个新房间，邀请好友加入</p>
-              <div className="mb-5">
-                <label className="block text-sm font-medium mb-2 text-body-strong">词汇级别</label>
-                <div className="grid grid-cols-2 gap-2">
-                  {(["CET4", "CET6", "TOEFL", "IELTS"] as WordLevel[]).map((level) => (
-                    <Button
-                      key={level}
-                      variant={selectedLevel === level ? "primary" : "outline"}
-                      size="sm"
-                      onClick={() => setSelectedLevel(level)}
-                    >
-                      {level}
-                    </Button>
-                  ))}
-                </div>
-              </div>
-              <Button
-                className="w-full"
-                onClick={handleCreateRoom}
-                disabled={status !== "idle"}
-              >
-                创建房间
-              </Button>
-            </CardContent>
-          </Card>
+        <Card className="border-hairline shadow-sm overflow-hidden">
+          {/* Tab Navigation */}
+          <div className="flex border-b border-hairline bg-surface-soft/60">
+            <button
+              onClick={() => setActiveTab("create")}
+              className={`flex-1 py-4 text-center font-medium text-sm transition-all border-b-2 ${
+                activeTab === "create"
+                  ? "border-primary text-primary font-semibold bg-surface-card"
+                  : "border-transparent text-muted hover:text-ink"
+              }`}
+            >
+              👑 创建新房间
+            </button>
+            <button
+              onClick={() => setActiveTab("join")}
+              className={`flex-1 py-4 text-center font-medium text-sm transition-all border-b-2 ${
+                activeTab === "join"
+                  ? "border-primary text-primary font-semibold bg-surface-card"
+                  : "border-transparent text-muted hover:text-ink"
+              }`}
+            >
+              🚪 加入已有房间
+            </button>
+          </div>
 
-          {/* Join Room */}
-          <Card>
-            <CardHeader>
-              <CardTitle>加入房间</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-muted mb-5">输入房间号加入对战</p>
-              <div className="mb-5">
-                <Input
-                  placeholder="输入房间号"
-                  value={joinRoomId}
-                  onChange={(e) => setJoinRoomId(e.target.value.toUpperCase())}
-                  className="text-center text-lg tracking-widest"
-                />
+          <CardContent className="p-6 md:p-8">
+            {activeTab === "create" ? (
+              <div className="space-y-6">
+                <div>
+                  <label className="block text-sm font-semibold mb-2 text-ink">
+                    选择挑战词库级别
+                  </label>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
+                    {(["CET4", "CET6", "TOEFL", "IELTS"] as WordLevel[]).map((level) => (
+                      <Button
+                        key={level}
+                        variant={selectedLevel === level ? "primary" : "outline"}
+                        size="md"
+                        className="py-3 font-medium"
+                        onClick={() => setSelectedLevel(level)}
+                      >
+                        {level}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="p-4 bg-surface-soft rounded-xl border border-hairline-soft text-xs text-muted space-y-1">
+                  <p>• 房间创建后将生成 6 位专属房间码</p>
+                  <p>• 发送房间码或链接给好友，双方就绪后立即开战</p>
+                </div>
+
+                <Button
+                  size="lg"
+                  variant="primary"
+                  className="w-full text-base py-4 shadow-xs"
+                  onClick={handleCreateRoom}
+                >
+                  🚀 立即创建房间
+                </Button>
               </div>
-              <Button
-                className="w-full"
-                onClick={handleJoinRoom}
-                disabled={!joinRoomId || status !== "idle"}
-              >
-                加入房间
-              </Button>
-            </CardContent>
-          </Card>
-        </div>
+            ) : (
+              <div className="space-y-6">
+                <div>
+                  <label className="block text-sm font-semibold mb-2 text-ink">
+                    输入 6 位房间码
+                  </label>
+                  <Input
+                    placeholder="如: A9K2F7"
+                    value={joinRoomId}
+                    onChange={(e) => setJoinRoomId(e.target.value.toUpperCase())}
+                    className="text-center text-2xl font-mono tracking-widest font-bold h-14 bg-surface-soft"
+                    maxLength={8}
+                    autoFocus
+                  />
+                </div>
+
+                <Button
+                  size="lg"
+                  variant="primary"
+                  className="w-full text-base py-4 shadow-xs"
+                  onClick={handleJoinRoom}
+                  disabled={!joinRoomId.trim()}
+                >
+                  ⚔️ 进入对战房间
+                </Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
       )}
 
       {status === "waiting" && room && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center justify-between">
-              <span>房间: {roomId}</span>
-              <Badge variant="info">等待对手</Badge>
-            </CardTitle>
+        <Card className="border-hairline shadow-md overflow-hidden animate-countdown-pop">
+          <CardHeader className="bg-surface-soft/60 border-b border-hairline pb-4">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-xl">对战房间 #{roomId}</CardTitle>
+              <Badge variant={room.players.length === 2 ? "coral" : "info"} className="animate-pulse">
+                {room.players.length === 2 ? "双方已入场" : "等待对手加入..."}
+              </Badge>
+            </div>
           </CardHeader>
-          <CardContent>
-            <div className="space-y-5">
-              <div>
-                <h3 className="font-medium mb-2 text-ink">房间号</h3>
-                <div className="p-5 bg-surface-dark rounded-lg text-center">
-                  <span className="font-display text-4xl font-medium tracking-widest text-on-dark">{roomId}</span>
-                  <p className="text-sm text-on-dark-soft mt-2">分享此房间号给好友</p>
-                </div>
-              </div>
 
-              <div>
-                <h3 className="font-medium mb-2 text-ink">玩家列表</h3>
-                <div className="space-y-2">
-                  {room.players.map((player) => (
-                    <div
-                      key={player.id}
-                      className="flex items-center justify-between p-3 bg-surface-card rounded-lg"
-                    >
-                      <span className="text-ink">{player.username}</span>
-                      {player.ready ? (
-                        <Badge variant="success">已准备</Badge>
-                      ) : (
-                        <Badge variant="warning">未准备</Badge>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="flex gap-4">
+          <CardContent className="p-6 md:p-8 space-y-6">
+            {/* Room Code & Share Center */}
+            <div className="p-6 bg-surface-dark rounded-2xl text-center text-on-dark space-y-3 relative overflow-hidden">
+              <span className="text-xs font-mono text-on-dark-soft tracking-wider">ROOM INVITE CODE</span>
+              <p className="font-display text-4xl md:text-5xl font-black tracking-widest text-primary">
+                {roomId}
+              </p>
+              <div className="flex flex-wrap justify-center gap-2 pt-2">
                 <Button
-                  className="flex-1"
-                  onClick={handleReady}
-                  disabled={isCurrentUserReady}
+                  size="sm"
+                  variant="secondary"
+                  className="text-xs bg-surface-dark-elevated text-on-dark border-surface-dark-elevated hover:bg-surface-dark-soft"
+                  onClick={() => copyToClipboard(roomId, "房间号已复制！")}
                 >
-                  准备
+                  📋 复制房间号
                 </Button>
-                {room.players.length === 2 &&
-                  room.players.every((p) => p.ready) && (
-                    <Button className="flex-1" onClick={handleStartGame}>
-                      开始游戏
-                    </Button>
-                  )}
                 <Button
-                  variant="outline"
-                  className="flex-1"
+                  size="sm"
+                  variant="secondary"
+                  className="text-xs bg-surface-dark-elevated text-on-dark border-surface-dark-elevated hover:bg-surface-dark-soft"
                   onClick={() => {
-                    if (joinTimeoutRef.current) {
-                      clearTimeout(joinTimeoutRef.current)
-                      joinTimeoutRef.current = null
-                    }
-                    if (channelRef.current) {
-                      const supabase = getSupabase()
-                      if (supabase) supabase.removeChannel(channelRef.current)
-                      channelRef.current = null
-                    }
-                    setRoom(null)
-                    setRoomId("")
-                    setStatus("idle")
+                    const url = `${window.location.origin}/lobby?join=${roomId}`
+                    copyToClipboard(url, "邀请链接已复制到剪贴板！")
                   }}
                 >
-                  离开房间
+                  🔗 复制邀请链接
                 </Button>
               </div>
+            </div>
+
+            {/* Players List */}
+            <div className="space-y-3">
+              <h3 className="font-semibold text-sm text-ink flex items-center justify-between">
+                <span>对战玩家 ({room.players.length}/2)</span>
+                <span className="text-xs text-muted font-normal">词库：{selectedLevel}</span>
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {room.players.map((player) => {
+                  const isMe = player.id === playerId
+                  return (
+                    <div
+                      key={player.id}
+                      className={`p-4 rounded-xl border flex items-center justify-between ${
+                        player.ready
+                          ? "bg-success/10 border-success/30"
+                          : "bg-surface-card border-hairline-soft"
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-full bg-primary/20 text-primary font-bold flex items-center justify-center text-sm">
+                          {player.username.charAt(0).toUpperCase()}
+                        </div>
+                        <div>
+                          <p className="font-semibold text-sm text-ink">
+                            {player.username} {isMe && <span className="text-xs text-muted font-normal">(我)</span>}
+                          </p>
+                          <p className="text-[11px] text-muted">在线</p>
+                        </div>
+                      </div>
+                      {player.ready ? (
+                        <Badge variant="success">✓ 已准备</Badge>
+                      ) : (
+                        <Badge variant="warning">⏳ 准备中</Badge>
+                      )}
+                    </div>
+                  )
+                })}
+
+                {/* Empty slot placeholder */}
+                {room.players.length === 1 && (
+                  <div className="p-4 rounded-xl border border-dashed border-hairline flex items-center justify-center text-muted text-sm gap-2">
+                    <span className="animate-spin text-primary">⚡</span>
+                    <span>等待好友进入房间...</span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Action Bar */}
+            <div className="flex flex-col sm:flex-row gap-3 pt-4 border-t border-hairline-soft">
+              <Button
+                variant="primary"
+                size="lg"
+                className="flex-1 shadow-xs"
+                onClick={handleReady}
+                disabled={isCurrentUserReady}
+              >
+                {isCurrentUserReady ? "✅ 我已准备就绪" : "👉 点击准备"}
+              </Button>
+
+              {room.players.length === 2 && room.players.every((p) => p.ready) && (
+                <Button
+                  variant="primary"
+                  size="lg"
+                  className="flex-1 bg-success hover:bg-success/90 animate-combo-pulse shadow-md"
+                  onClick={handleStartGame}
+                >
+                  🚀 双方已就绪 · 开战！
+                </Button>
+              )}
+
+              <Button
+                variant="outline"
+                size="lg"
+                className="sm:w-32"
+                onClick={() => {
+                  if (joinTimeoutRef.current) {
+                    clearTimeout(joinTimeoutRef.current)
+                    joinTimeoutRef.current = null
+                  }
+                  if (channelRef.current) {
+                    const supabase = getSupabase()
+                    if (supabase) supabase.removeChannel(channelRef.current)
+                    channelRef.current = null
+                  }
+                  setRoom(null)
+                  setRoomId("")
+                  setStatus("idle")
+                }}
+              >
+                离开房间
+              </Button>
             </div>
           </CardContent>
         </Card>
