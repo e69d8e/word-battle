@@ -20,8 +20,7 @@ export function useSpeech() {
     if (typeof window === "undefined" || !text) return
 
     const cleanText = text.toLowerCase().trim()
-    const fallbackUrl = `https://dict.youdao.com/dictvoice?audio=${encodeURIComponent(cleanText)}&type=2`
-    const localUrl = `/audio/${cleanText}.mp3`
+    const onlineUrl = `https://dict.youdao.com/dictvoice?audio=${encodeURIComponent(cleanText)}&type=2`
 
     if (!audioRef.current) {
       audioRef.current = new Audio()
@@ -31,24 +30,28 @@ export function useSpeech() {
     audio.pause()
     audio.currentTime = 0
 
-    // If we already know local file is missing, jump straight to fallback
-    if (missingLocalAudioSet.has(cleanText)) {
-      audio.src = fallbackUrl
-      audio.play().catch((err) => console.warn("Online audio play error:", err))
-      return
-    }
-
-    audio.src = localUrl
-    const playPromise = audio.play()
-    if (playPromise !== undefined) {
-      playPromise.catch(() => {
-        missingLocalAudioSet.add(cleanText)
-        if (audioRef.current) {
-          audioRef.current.src = fallbackUrl
-          audioRef.current.play().catch((fallbackErr) => {
-            console.warn("Pronunciation playback failed:", fallbackErr)
-          })
-        }
+    // In Electron with offline audio package, prioritize local audio file
+    const isElectron = typeof window !== "undefined" && Boolean((window as unknown as { electron?: unknown }).electron)
+    if (isElectron && !missingLocalAudioSet.has(cleanText)) {
+      const localUrl = `/audio/${cleanText}.mp3`
+      audio.src = localUrl
+      const playPromise = audio.play()
+      if (playPromise !== undefined) {
+        playPromise.catch(() => {
+          missingLocalAudioSet.add(cleanText)
+          if (audioRef.current) {
+            audioRef.current.src = onlineUrl
+            audioRef.current.play().catch((fallbackErr) => {
+              console.warn("Pronunciation playback failed:", fallbackErr)
+            })
+          }
+        })
+      }
+    } else {
+      // Standard Web: directly stream from Youdao CDN with zero 404 delays
+      audio.src = onlineUrl
+      audio.play().catch((err) => {
+        console.warn("Pronunciation playback failed:", err)
       })
     }
   }, [])

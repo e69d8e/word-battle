@@ -9,7 +9,7 @@
     "start": "next start",
     "lint": "eslint",
     "electron-dev": "concurrently \"next dev --webpack\" \"wait-on http://localhost:3000 && electron .\"",
-    "electron-build": "next build && electron-builder",
+    "electron-build": "node scripts/download-audio.js && next build && electron-builder",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
