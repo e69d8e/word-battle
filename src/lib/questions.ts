@@ -6,33 +6,67 @@ export function generateQuestion(word: WordItem, allWords: WordItem[]): Question
   const type = types[Math.floor(Math.random() * types.length)]
 
   let correctAnswer: string
-  let options: string[]
+  const distractors = new Set<string>()
+  const n = allWords.length
 
   if (type === "en2cn") {
     correctAnswer = word.meaningCn
-    const otherMeanings = [...new Set(
-      allWords
-        .filter((w) => w.meaningCn.trim() !== word.meaningCn.trim())
-        .map((w) => w.meaningCn)
-    )]
-    options = [correctAnswer, ...getRandomItems(otherMeanings, 3)]
+    const targetMeaning = word.meaningCn.trim()
+
+    // O(1) random sampling for distractors to avoid copying/filtering thousands of words
+    const maxAttempts = Math.min(60, n * 3)
+    let attempts = 0
+    while (distractors.size < 3 && attempts < maxAttempts && n > 1) {
+      attempts++
+      const randomWord = allWords[Math.floor(Math.random() * n)]
+      const cand = randomWord.meaningCn.trim()
+      if (cand && cand !== targetMeaning && !distractors.has(randomWord.meaningCn)) {
+        distractors.add(randomWord.meaningCn)
+      }
+    }
+
+    // Fallback if pool is very small or highly duplicated
+    if (distractors.size < 3 && n > 1) {
+      for (const w of allWords) {
+        if (w.meaningCn.trim() !== targetMeaning && !distractors.has(w.meaningCn)) {
+          distractors.add(w.meaningCn)
+          if (distractors.size >= 3) break
+        }
+      }
+    }
   } else {
     // cn2en and listening share the same logic
     correctAnswer = word.word
-    const otherWords = [...new Set(
-      allWords
-        .filter((w) => w.word.toLowerCase().trim() !== word.word.toLowerCase().trim())
-        .map((w) => w.word)
-    )]
-    options = [correctAnswer, ...getRandomItems(otherWords, 3)]
+    const targetWord = word.word.toLowerCase().trim()
+
+    const maxAttempts = Math.min(60, n * 3)
+    let attempts = 0
+    while (distractors.size < 3 && attempts < maxAttempts && n > 1) {
+      attempts++
+      const randomWord = allWords[Math.floor(Math.random() * n)]
+      const cand = randomWord.word.toLowerCase().trim()
+      if (cand && cand !== targetWord && !distractors.has(randomWord.word)) {
+        distractors.add(randomWord.word)
+      }
+    }
+
+    // Fallback if pool is very small
+    if (distractors.size < 3 && n > 1) {
+      for (const w of allWords) {
+        if (w.word.toLowerCase().trim() !== targetWord && !distractors.has(w.word)) {
+          distractors.add(w.word)
+          if (distractors.size >= 3) break
+        }
+      }
+    }
   }
 
-  // Deduplicate options
-  options = [...new Set(options)]
+  let options = [correctAnswer, ...distractors]
 
   // Ensure minimum 4 options (pad with placeholders if word pool is too small)
+  let padIndex = 1
   while (options.length < 4) {
-    options.push(`选项${options.length + 1}`)
+    options.push(`选项${padIndex++}`)
   }
 
   options = shuffleArray(options)

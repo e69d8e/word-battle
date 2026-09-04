@@ -1,5 +1,6 @@
 "use client"
 
+import React from "react"
 import { cn } from "@/lib/utils"
 
 interface TimerProps {
@@ -7,7 +8,7 @@ interface TimerProps {
   total: number
 }
 
-export function Timer({ seconds, total }: TimerProps) {
+export const Timer = React.memo(function Timer({ seconds, total }: TimerProps) {
   const progress = Math.max(0, Math.min(100, (seconds / total) * 100))
   const isUrgent = seconds <= 5
   const isWarning = seconds <= 8 && seconds > 5
@@ -47,4 +48,4 @@ export function Timer({ seconds, total }: TimerProps) {
       </div>
     </div>
   )
-}
+})

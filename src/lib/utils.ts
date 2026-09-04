@@ -19,6 +19,18 @@ export function getRandomItems<T>(array: T[], count: number): T[] {
   if (count <= 0 || n === 0) return []
   if (count >= n) return shuffleArray(array)
 
+  // When count is large relative to n, partial Fisher-Yates avoids while-loop collisions
+  if (count > n / 2) {
+    const copy = [...array]
+    for (let i = 0; i < count; i++) {
+      const j = i + Math.floor(Math.random() * (n - i));
+      const temp = copy[i]
+      copy[i] = copy[j]
+      copy[j] = temp
+    }
+    return copy.slice(0, count)
+  }
+
   const result: T[] = []
   const pickedIndices = new Set<number>()
   while (pickedIndices.size < count) {

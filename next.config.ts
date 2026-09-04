@@ -12,6 +12,11 @@ const nextConfig: NextConfig = {
     "*.local",
     "*.lan",
   ],
+  compress: true,
+  poweredByHeader: false,
+  experimental: {
+    optimizePackageImports: ["clsx", "tailwind-merge", "uuid", "@supabase/supabase-js"],
+  },
 };
 
 export default nextConfig;

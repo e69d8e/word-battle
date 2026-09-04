@@ -14,6 +14,16 @@ const wordDataMap: Record<string, { name: string; data: typeof cet4Data }> = {
   IELTS: { name: "IELTS 核心词汇", data: ieltsData },
 }
 
+// In-memory cache for pre-formatted words to eliminate GC churn and redundant mapping
+const formattedWordsCache = new Map<string, Array<{
+  id: string
+  word: string
+  phonetic: string | null
+  meaning: string
+  meaningCn: string
+  example: string | null
+}>>()
+
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url)
@@ -28,6 +38,20 @@ export async function GET(req: NextRequest) {
       "Cache-Control": "public, max-age=86400, s-maxage=86400, stale-while-revalidate=604800",
     }
 
+    let words = formattedWordsCache.get(level)
+    if (!words) {
+      const levelLower = level.toLowerCase()
+      words = wordData.data.map((w, i) => ({
+        id: `${levelLower}-${i}`,
+        word: w.word,
+        phonetic: w.phonetic || null,
+        meaning: w.meaning,
+        meaningCn: w.meaningCn,
+        example: w.example || null,
+      }))
+      formattedWordsCache.set(level, words)
+    }
+
     return apiSuccess(
       {
         wordList: {
@@ -35,14 +59,7 @@ export async function GET(req: NextRequest) {
           level,
           wordCount: wordData.data.length,
         },
-        words: wordData.data.map((w, i) => ({
-          id: `${level.toLowerCase()}-${i}`,
-          word: w.word,
-          phonetic: w.phonetic || null,
-          meaning: w.meaning,
-          meaningCn: w.meaningCn,
-          example: w.example || null,
-        })),
+        words,
       },
       { headers: cacheHeaders }
     )

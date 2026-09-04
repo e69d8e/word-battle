@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback, useRef } from "react"
+import { useState, useEffect, useCallback, useRef, useMemo } from "react"
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -22,7 +22,7 @@ export default function GamePage() {
   const { user } = useAuthStore()
   const {
     mode, status, questions, currentIndex,
-    score1, score2, combo1, combo2, lastScoreGained1, lastScoreGained2, answers1,
+    score1, score2, combo1, combo2, lastScoreGained1, lastScoreGained2, answers1, answers2,
     initGame, submitAnswer, syncOpponentAnswer, syncOpponentFinished, nextQuestion, finishGame, resetGame
   } = useGameStore()
 
@@ -65,6 +65,34 @@ export default function GamePage() {
   const rematchRequestedRef = useRef(false)
   const opponentRematchRef = useRef(false)
   const isHostRef = useRef(false)
+  // Calculate player correct counts with useMemo to avoid recomputing on every timer tick
+  const player1CorrectCount = useMemo(
+    () => Object.values(answers1).filter((a) => a.correct).length,
+    [answers1]
+  )
+  const player2CorrectCount = useMemo(() => {
+    return mode === "realtime"
+      ? opponentCorrectCount
+      : Object.values(answers2).filter((a) => a.correct).length
+  }, [mode, opponentCorrectCount, answers2])
+
+  const player1Info = useMemo(() => ({
+    name: user?.username || "玩家1",
+    score: score1,
+    correctCount: player1CorrectCount,
+    combo: combo1,
+    lastScoreGained: lastScoreGained1,
+    isMe: true,
+  }), [user?.username, score1, player1CorrectCount, combo1, lastScoreGained1])
+
+  const player2Info = useMemo(() => ({
+    name: mode === "ai" ? "AI 机器人" : (opponentUsername || "玩家2"),
+    score: score2,
+    correctCount: player2CorrectCount,
+    combo: combo2,
+    lastScoreGained: lastScoreGained2,
+    isMe: false,
+  }), [mode, opponentUsername, score2, player2CorrectCount, combo2, lastScoreGained2])
 
   // Initialize opponent username from URL query param
   useEffect(() => {
@@ -814,13 +842,6 @@ export default function GamePage() {
   // Game playing screen
   if (!currentQuestion) return null
 
-  // Calculate player1 correct count from store
-  const answers2 = useGameStore.getState().answers2
-  const player1CorrectCount = Object.values(answers1).filter((a) => a.correct).length
-  const player2CorrectCount = mode === "realtime"
-    ? opponentCorrectCount
-    : Object.values(answers2).filter((a) => a.correct).length
-
   return (
     <div className="max-w-3xl mx-auto px-4 py-8">
       {/* Waiting for opponent overlay */}
@@ -839,22 +860,8 @@ export default function GamePage() {
       {/* Score Board */}
       <div className="mb-6">
         <ScoreBoard
-          player1={{
-            name: user?.username || "玩家1",
-            score: score1,
-            correctCount: player1CorrectCount,
-            combo: combo1,
-            lastScoreGained: lastScoreGained1,
-            isMe: true,
-          }}
-          player2={{
-            name: mode === "ai" ? "AI 机器人" : (opponentUsername || "玩家2"),
-            score: score2,
-            correctCount: player2CorrectCount,
-            combo: combo2,
-            lastScoreGained: lastScoreGained2,
-            isMe: false,
-          }}
+          player1={player1Info}
+          player2={player2Info}
           currentQuestion={currentIndex + 1}
           totalQuestions={questions.length}
         />
