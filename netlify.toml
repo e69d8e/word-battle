@@ -2,5 +2,9 @@
   command = "node scripts/download-audio.js && npm run build"
   publish = ".next"
 
+[build.environment]
+  NPM_FLAGS = "--legacy-peer-deps"
+  NODE_VERSION = "22"
+
 [[plugins]]
   package = "@netlify/plugin-nextjs"
