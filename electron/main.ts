@@ -25,7 +25,9 @@ function createWindow() {
     mainWindow.loadURL("http://localhost:3000")
     mainWindow.webContents.openDevTools()
   } else {
-    mainWindow.loadFile(path.join(__dirname, "../out/index.html"))
+    // The web app requires the Next.js server (API routes), which cannot be
+    // statically exported — production loads the deployed site instead.
+    mainWindow.loadURL(process.env.APP_URL || "https://word-battle.netlify.app")
   }
 
   // Show window when ready

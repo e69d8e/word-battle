@@ -13,6 +13,8 @@ const eslintConfig = defineConfig([
     "build/**",
     "next-env.d.ts",
     "scripts/**",
+    // Compiled Electron main process:
+    "dist-electron/**",
   ]),
 ]);
 
