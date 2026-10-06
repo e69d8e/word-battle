@@ -398,8 +398,7 @@ export default function GamePage() {
         console.log("[Realtime] Received answer-submitted from playerId:", payload.playerId, "currentUserId:", currentUserId)
         // Receive opponent's answer - check if it's from a different player
         if (payload.playerId !== currentUserId) {
-          const { questionId, answer, timeMs, isCorrect, score, totalScore, combo, maxCombo, lastScoreGained, username } = payload
-          console.log("[Realtime] Processing opponent answer, isCorrect:", isCorrect, "totalScore:", totalScore)
+          const { questionId, answer, timeMs, isCorrect, username } = payload
           // Store opponent's username
           if (username && !opponentUsernameRef.current) {
             opponentUsernameRef.current = username
@@ -413,17 +412,12 @@ export default function GamePage() {
             setOpponentCorrectCount(opponentCorrectCountRef.current)
           }
 
-          // Authoritative sync to gameStore
-          const computedTotalScore = totalScore !== undefined ? totalScore : (useGameStore.getState().score2 + (score || 0))
+          // Score/combo are recomputed locally inside the store (remote totals are not trusted)
           syncOpponentAnswer({
             questionId,
             answer,
             isCorrect,
             timeMs,
-            totalScore: computedTotalScore,
-            combo: combo ?? (isCorrect ? (useGameStore.getState().combo2 + 1) : 0),
-            maxCombo: maxCombo ?? 0,
-            lastScoreGained: lastScoreGained ?? (isCorrect ? (score || 0) : 0),
           })
         }
       })

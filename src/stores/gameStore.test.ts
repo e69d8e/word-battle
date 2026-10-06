@@ -53,17 +53,17 @@ describe("gameStore", () => {
 
     // Answer correctly in 5000ms:
     // baseScore: 100
-    // timeBonus: Math.floor((15000 - 5000) / 100) = 100
+    // timeBonus: Math.min(50, Math.floor((15000 - 5000) / 100)) = 50 (capped)
     // comboBonus: 0 (first correct answer, combo=1)
-    // totalScore = 200
+    // totalScore = 150
     const isCorrect = useGameStore.getState().submitAnswer(1, "苹果", 5000)
 
     expect(isCorrect).toBe(true)
     const state = useGameStore.getState()
-    expect(state.score1).toBe(200)
+    expect(state.score1).toBe(150)
     expect(state.combo1).toBe(1)
     expect(state.maxCombo1).toBe(1)
-    expect(state.lastScoreGained1).toBe(200)
+    expect(state.lastScoreGained1).toBe(150)
     expect(state.answers1["q-1"]).toEqual({
       answer: "苹果",
       correct: true,
@@ -89,7 +89,7 @@ describe("gameStore", () => {
     expect(state.combo1).toBe(2)
     expect(state.maxCombo1).toBe(2)
     expect(state.lastScoreGained1).toBe(160)
-    expect(state.score1).toBe(200 + 160)
+    expect(state.score1).toBe(150 + 160)
   })
 
   it("resets combo and awards 0 score on wrong answer", () => {
@@ -121,10 +121,10 @@ describe("gameStore", () => {
     expect(secondSubmission).toBe(false)
 
     // Score remains unchanged
-    expect(useGameStore.getState().score1).toBe(200)
+    expect(useGameStore.getState().score1).toBe(150)
   })
 
-  it("syncs opponent answers correctly in multiplayer mode", () => {
+  it("syncs opponent answers by recomputing score locally", () => {
     useGameStore.getState().initGame("realtime", "CET4", mockWords, 2, [mockQuestion1, mockQuestion2])
 
     useGameStore.getState().syncOpponentAnswer({
@@ -132,22 +132,48 @@ describe("gameStore", () => {
       answer: "苹果",
       isCorrect: true,
       timeMs: 4000,
-      totalScore: 210,
-      combo: 1,
-      maxCombo: 1,
-      lastScoreGained: 210,
     })
 
     const state = useGameStore.getState()
-    expect(state.score2).toBe(210)
+    // Recomputed locally: base 100 + min(50, floor((15000-4000)/100)=110 -> capped 50) = 150
+    expect(state.score2).toBe(150)
     expect(state.combo2).toBe(1)
     expect(state.maxCombo2).toBe(1)
-    expect(state.lastScoreGained2).toBe(210)
+    expect(state.lastScoreGained2).toBe(150)
     expect(state.answers2["q-1"]).toEqual({
       answer: "苹果",
       correct: true,
       time: 4000,
     })
+  })
+
+  it("ignores duplicate or unknown opponent answer broadcasts", () => {
+    useGameStore.getState().initGame("realtime", "CET4", mockWords, 2, [mockQuestion1, mockQuestion2])
+
+    useGameStore.getState().syncOpponentAnswer({
+      questionId: "q-1",
+      answer: "苹果",
+      isCorrect: true,
+      timeMs: 4000,
+    })
+    // Replay of the same question must not add score again
+    useGameStore.getState().syncOpponentAnswer({
+      questionId: "q-1",
+      answer: "苹果",
+      isCorrect: true,
+      timeMs: 1000,
+    })
+    // Unknown question id must be ignored entirely
+    useGameStore.getState().syncOpponentAnswer({
+      questionId: "q-unknown",
+      answer: "香蕉",
+      isCorrect: true,
+      timeMs: 1000,
+    })
+
+    const state = useGameStore.getState()
+    expect(state.score2).toBe(150)
+    expect(Object.keys(state.answers2)).toEqual(["q-1"])
   })
 
   it("transitions question, finish, and reset states properly", () => {

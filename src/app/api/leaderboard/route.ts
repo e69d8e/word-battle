@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server"
 import { prisma } from "@/lib/db"
-import { apiError, apiSuccess } from "@/lib/api"
+import { apiError, apiSuccess, parseLimit } from "@/lib/api"
 
 interface LeaderboardCacheItem {
   timestamp: number
@@ -14,13 +14,14 @@ interface LeaderboardCacheItem {
 
 const leaderboardCache = new Map<string, LeaderboardCacheItem>()
 const CACHE_TTL_MS = 15_000 // 15 seconds TTL
+const MAX_CACHE_ENTRIES = 100 // keys are client-controlled — cap to prevent unbounded growth
 
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url)
     const mode = searchParams.get("mode")
     const level = searchParams.get("level")
-    const limit = parseInt(searchParams.get("limit") || "50")
+    const limit = parseLimit(searchParams.get("limit"), 50)
 
     const cacheKey = `${mode || "all"}:${level || "all"}:${limit}`
     const cached = leaderboardCache.get(cacheKey)
@@ -59,6 +60,9 @@ export async function GET(req: NextRequest) {
       score: s._max.score,
     }))
 
+    if (leaderboardCache.size >= MAX_CACHE_ENTRIES) {
+      leaderboardCache.clear()
+    }
     leaderboardCache.set(cacheKey, {
       timestamp: Date.now(),
       data: leaderboard,

@@ -12,10 +12,6 @@ interface GameStore extends GameState {
     answer: string
     isCorrect: boolean
     timeMs: number
-    totalScore: number
-    combo: number
-    maxCombo: number
-    lastScoreGained: number
   }) => void
   syncOpponentFinished: (data: {
     finalScore?: number
@@ -89,7 +85,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
     // Scoring: Base 100 + Time bonus (up to 50) + Combo bonus (10 * (nextCombo - 1) if combo >= 2)
     const baseScore = isCorrect ? 100 : 0
-    const timeBonus = isCorrect ? Math.max(0, Math.floor((15000 - timeMs) / 100)) : 0
+    const timeBonus = isCorrect ? Math.min(50, Math.max(0, Math.floor((15000 - timeMs) / 100))) : 0
     const comboBonus = isCorrect && nextCombo >= 2 ? Math.min(50, (nextCombo - 1) * 10) : 0
     const totalScore = baseScore + timeBonus + comboBonus
 
@@ -112,13 +108,25 @@ export const useGameStore = create<GameStore>((set, get) => ({
     return isCorrect
   },
 
-  syncOpponentAnswer: ({ questionId, answer, isCorrect, timeMs, totalScore, combo, maxCombo, lastScoreGained }) => {
+  syncOpponentAnswer: ({ questionId, answer, isCorrect, timeMs }) => {
     const state = get()
+    // Ignore duplicate / out-of-order broadcasts and unknown question ids
+    if (state.answers2[questionId]) return
+    if (!state.questions.some((q) => q.id === questionId)) return
+
+    // Recompute with the same formula as submitAnswer instead of trusting the
+    // opponent's claimed cumulative total (which is attacker-controllable).
+    const nextCombo = isCorrect ? state.combo2 + 1 : 0
+    const baseScore = isCorrect ? 100 : 0
+    const timeBonus = isCorrect ? Math.min(50, Math.max(0, Math.floor((15000 - Math.max(0, timeMs)) / 100))) : 0
+    const comboBonus = isCorrect && nextCombo >= 2 ? Math.min(50, (nextCombo - 1) * 10) : 0
+    const gained = baseScore + timeBonus + comboBonus
+
     set({
-      score2: totalScore,
-      combo2: combo,
-      maxCombo2: Math.max(state.maxCombo2, maxCombo),
-      lastScoreGained2: lastScoreGained,
+      score2: state.score2 + gained,
+      combo2: nextCombo,
+      maxCombo2: Math.max(state.maxCombo2, nextCombo),
+      lastScoreGained2: gained,
       answers2: {
         ...state.answers2,
         [questionId]: { answer, correct: isCorrect, time: timeMs },

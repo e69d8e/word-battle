@@ -26,9 +26,15 @@ export function useWords(level: WordLevel) {
     async function loadWords() {
       try {
         const res = await fetch(`/api/words?level=${level}`)
+        if (!res.ok) {
+          throw new Error(`HTTP ${res.status}`)
+        }
         const resData = await res.json()
         const fetchedWords: WordItem[] = resData.words || []
-        wordCache.set(level, fetchedWords)
+        // Only cache non-empty results so a failed/partial fetch can be retried
+        if (fetchedWords.length > 0) {
+          wordCache.set(level, fetchedWords)
+        }
         if (!cancelled) {
           setData({ level, words: fetchedWords, isLoading: false })
         }

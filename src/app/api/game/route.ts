@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server"
 import { prisma } from "@/lib/db"
-import { apiError, apiSuccess } from "@/lib/api"
+import { apiError, apiSuccess, parseLimit } from "@/lib/api"
 
 const VALID_MODES = ["ai", "realtime", "async"]
 const VALID_LEVELS = ["CET4", "CET6", "TOEFL", "IELTS"]
@@ -84,7 +84,7 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url)
     const userId = searchParams.get("userId")
     const mode = searchParams.get("mode")
-    const limit = parseInt(searchParams.get("limit") || "20")
+    const limit = parseLimit(searchParams.get("limit"), 20)
 
     const where: Record<string, unknown> = {}
     if (userId) {
