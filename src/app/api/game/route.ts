@@ -1,56 +1,108 @@
 import { NextRequest } from "next/server"
 import { prisma } from "@/lib/db"
 import { apiError, apiSuccess, parseLimit } from "@/lib/api"
+import { getSessionFromRequest } from "@/lib/auth"
+import { z } from "zod"
 
-const VALID_MODES = ["ai", "realtime", "async"]
-const VALID_LEVELS = ["CET4", "CET6", "TOEFL", "IELTS"]
+// Max legit score per question: base 100 + time bonus 50 + combo bonus 50
+const MAX_SCORE_PER_QUESTION = 200
+const MAX_QUESTIONS = 10
+
+const questionSchema = z.object({
+  type: z.string().min(1).max(20),
+  options: z.array(z.string().max(500)).max(8),
+  answer1: z.string().max(500).nullish(),
+  answer2: z.string().max(500).nullish(),
+  correct1: z.boolean().optional(),
+  correct2: z.boolean().optional(),
+  time1: z.number().int().min(0).max(120_000).nullish(),
+  time2: z.number().int().min(0).max(120_000).nullish(),
+})
+
+const gameSchema = z
+  .object({
+    mode: z.enum(["ai", "realtime", "async"]),
+    wordLevel: z.enum(["CET4", "CET6", "TOEFL", "IELTS"]),
+    // ids are Prisma uuid() defaults; an empty string means "no opponent"
+    player2Id: z.union([z.string().uuid(), z.literal("")]).nullish(),
+    score1: z.number().int().min(0),
+    score2: z.number().int().min(0).nullish(),
+    status: z.enum(["waiting", "playing", "finished"]).optional(),
+    // Client-generated id for idempotent retries (same game POSTed twice is a no-op)
+    clientId: z.string().uuid().optional(),
+    questions: z.array(questionSchema).max(MAX_QUESTIONS).optional(),
+  })
+  .refine(
+    (data) => {
+      const totalQ = data.questions?.length ?? MAX_QUESTIONS
+      return data.score1 <= totalQ * MAX_SCORE_PER_QUESTION
+    },
+    { message: "score1 超出该题量的合法上限", path: ["score1"] }
+  )
+  .refine(
+    (data) => {
+      if (data.score2 === undefined || data.score2 === null) return true
+      const totalQ = data.questions?.length ?? MAX_QUESTIONS
+      return data.score2 <= totalQ * MAX_SCORE_PER_QUESTION
+    },
+    { message: "score2 超出该题量的合法上限", path: ["score2"] }
+  )
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json()
-    const { mode, wordLevel, player1Id, player2Id, score1, score2, questions, status } = body
-
-    if (!player1Id) {
-      return apiError("缺少玩家信息", 400)
+    // Identity comes from the session — the client can only save games for itself
+    const session = await getSessionFromRequest(req)
+    if (!session) {
+      return apiError("请先登录", 401)
     }
 
-    if (mode && !VALID_MODES.includes(mode)) {
-      return apiError("无效的游戏模式", 400)
+    const parsed = gameSchema.safeParse(await req.json())
+    if (!parsed.success) {
+      return apiError(parsed.error.issues[0]?.message || "请求参数不合法", 400)
     }
+    const { mode, wordLevel, player2Id, score1, score2, status, clientId, questions } = parsed.data
 
-    if (wordLevel && !VALID_LEVELS.includes(wordLevel)) {
-      return apiError("无效的词汇级别", 400)
-    }
-
-    const winnerId = score1 > score2 ? player1Id : score2 > score1 ? player2Id : null
+    const score2Value = score2 ?? 0
+    const winnerId = score1 > score2Value ? session.userId : score2Value > score1 ? player2Id ?? null : null
 
     const isFinished = status === "finished" || !status
+
+    // Idempotency: a retried POST with the same clientId returns the original game
+    if (clientId) {
+      const existing = await prisma.game.findUnique({
+        where: { clientId },
+        include: { questions: true },
+      })
+      if (existing) {
+        return apiSuccess({ game: existing, duplicate: true })
+      }
+    }
 
     const game = await prisma.$transaction(async (tx) => {
       const createdGame = await tx.game.create({
         data: {
+          clientId: clientId ?? null,
           mode,
           status: status || "finished",
           wordLevel,
-          player1Id,
+          player1Id: session.userId,
           player2Id: player2Id || null,
           score1,
-          score2,
+          score2: score2 ?? 0,
           winnerId,
-          totalQ: questions?.length || 10,
+          totalQ: questions?.length || MAX_QUESTIONS,
           finishedAt: isFinished ? new Date() : null,
           questions: questions
             ? {
-                create: questions.map((q: { wordId?: string; type: string; options: string[]; answer1?: string; answer2?: string; correct1?: boolean; correct2?: boolean; time1?: number; time2?: number }) => ({
-                  wordId: null,
+                create: questions.map((q) => ({
                   type: q.type,
                   options: JSON.stringify(q.options),
-                  answer1: q.answer1,
-                  answer2: q.answer2,
+                  answer1: q.answer1 ?? null,
+                  answer2: q.answer2 ?? null,
                   correct1: q.correct1 || false,
                   correct2: q.correct2 || false,
-                  time1: q.time1,
-                  time2: q.time2,
+                  time1: q.time1 ?? null,
+                  time2: q.time2 ?? null,
                 })),
               }
             : undefined,
@@ -61,9 +113,9 @@ export async function POST(req: NextRequest) {
       if (isFinished) {
         await tx.score.createMany({
           data: [
-            { userId: player1Id, mode, level: wordLevel, score: score1 },
+            { userId: session.userId, mode, level: wordLevel, score: score1 },
             ...(player2Id
-              ? [{ userId: player2Id, mode, level: wordLevel, score: score2 }]
+              ? [{ userId: player2Id, mode, level: wordLevel, score: score2 ?? 0 }]
               : []),
           ],
         })
@@ -81,14 +133,18 @@ export async function POST(req: NextRequest) {
 
 export async function GET(req: NextRequest) {
   try {
+    const session = await getSessionFromRequest(req)
+    if (!session) {
+      return apiError("请先登录", 401)
+    }
+
     const { searchParams } = new URL(req.url)
-    const userId = searchParams.get("userId")
     const mode = searchParams.get("mode")
     const limit = parseLimit(searchParams.get("limit"), 20)
 
-    const where: Record<string, unknown> = {}
-    if (userId) {
-      where.OR = [{ player1Id: userId }, { player2Id: userId }]
+    // Users can only read their own match history
+    const where: Record<string, unknown> = {
+      OR: [{ player1Id: session.userId }, { player2Id: session.userId }],
     }
     if (mode) {
       where.mode = mode

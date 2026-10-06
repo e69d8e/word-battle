@@ -31,7 +31,8 @@ describe("authStore", () => {
 
     expect(result.success).toBe(true)
     expect(useAuthStore.getState().user).toEqual(mockUser)
-    expect(localStorage.getItem("userId")).toBe("u-123")
+    // Identity comes from the httpOnly session cookie — no localStorage id
+    expect(localStorage.getItem("userId")).toBeNull()
   })
 
   it("handles failed login", async () => {
@@ -39,16 +40,15 @@ describe("authStore", () => {
       "fetch",
       vi.fn().mockResolvedValue({
         ok: false,
-        json: async () => ({ error: "密码错误，请重新输入" }),
+        json: async () => ({ error: "用户名或密码错误" }),
       })
     )
 
     const result = await useAuthStore.getState().login("testuser", "wrongpass")
 
     expect(result.success).toBe(false)
-    expect(result.error).toBe("密码错误，请重新输入")
+    expect(result.error).toBe("用户名或密码错误")
     expect(useAuthStore.getState().user).toBeNull()
-    expect(localStorage.getItem("userId")).toBeNull()
   })
 
   it("handles registration successfully", async () => {
@@ -70,10 +70,12 @@ describe("authStore", () => {
 
     expect(result.success).toBe(true)
     expect(useAuthStore.getState().user).toEqual(mockUser)
-    expect(localStorage.getItem("userId")).toBe("u-456")
+    expect(localStorage.getItem("userId")).toBeNull()
   })
 
-  it("clears user and storage on logout", () => {
+  it("clears user and server session on logout", () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true })
+    vi.stubGlobal("fetch", fetchMock)
     useAuthStore.setState({
       user: { id: "u-123", username: "testuser", createdAt: new Date() },
     })
@@ -83,10 +85,10 @@ describe("authStore", () => {
 
     expect(useAuthStore.getState().user).toBeNull()
     expect(localStorage.getItem("userId")).toBeNull()
+    expect(fetchMock).toHaveBeenCalledWith("/api/auth/logout", { method: "POST" })
   })
 
-  it("checkAuth restores user when valid userId in localStorage", async () => {
-    localStorage.setItem("userId", "u-123")
+  it("checkAuth restores user when session cookie is valid", async () => {
     const mockUser = {
       id: "u-123",
       username: "testuser",
@@ -108,15 +110,13 @@ describe("authStore", () => {
     expect(useAuthStore.getState().isLoading).toBe(false)
   })
 
-  it("checkAuth cleans up when user is not found (404)", async () => {
-    localStorage.setItem("userId", "deleted-user")
-
+  it("checkAuth cleans up when session is missing (401)", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue({
         ok: false,
-        status: 404,
-        json: async () => ({ error: "用户不存在" }),
+        status: 401,
+        json: async () => ({ error: "未登录" }),
       })
     )
 
@@ -125,5 +125,20 @@ describe("authStore", () => {
     expect(useAuthStore.getState().user).toBeNull()
     expect(useAuthStore.getState().isLoading).toBe(false)
     expect(localStorage.getItem("userId")).toBeNull()
+  })
+
+  it("checkAuth clears stale session when user no longer exists (404)", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 404,
+      json: async () => ({ error: "用户不存在" }),
+    })
+    vi.stubGlobal("fetch", fetchMock)
+
+    await useAuthStore.getState().checkAuth()
+
+    expect(useAuthStore.getState().user).toBeNull()
+    expect(useAuthStore.getState().isLoading).toBe(false)
+    expect(fetchMock).toHaveBeenCalledWith("/api/auth/logout", { method: "POST" })
   })
 })

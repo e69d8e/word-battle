@@ -67,7 +67,12 @@ Key models: User, WordList, Word, Game, GameQuestion, Score. See `prisma/schema.
 - Connection via `DATABASE_URL` (pooled) and `DIRECT_URL` (direct, for migrations)
 
 ### Auth model
-Simple localStorage-based: user ID stored client-side, passed as query param to API routes. No JWT, no sessions, no middleware auth guards.
+JWT session in an httpOnly cookie (`wb_session`, signed with `AUTH_SECRET` via `jose`):
+- `/api/auth/login` and `/api/auth/register` set the session cookie; `/api/auth/logout` clears it
+- `/api/auth/me`, `GET/POST /api/game` derive identity from the cookie via `getSessionFromRequest()` (`src/lib/auth.ts`) — client-supplied user ids are never trusted
+- Score submissions are validated with zod (score ≤ questions × 200) and deduplicated via `Game.clientId`
+- Login/register are IP rate-limited (`src/lib/rate-limit.ts`, in-memory — per-instance on serverless)
+- localStorage only caches display data; it carries no identity
 
 ## File Layout
 

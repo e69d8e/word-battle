@@ -43,6 +43,7 @@ model Word {
 
 model Game {
   id         String         @id @default(uuid())
+  clientId   String?        @unique
   mode       String
   status     String         @default("waiting")
   wordLevel  String

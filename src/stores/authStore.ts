@@ -41,8 +41,8 @@ export const useAuthStore = create<AuthStore>((set) => ({
       const cleanUsername = username.trim()
       const { user, error } = await authRequest("/api/auth/login", { username: cleanUsername, password })
       if (user) {
+        // Identity lives in the httpOnly session cookie set by the server
         set({ user })
-        localStorage.setItem("userId", user.id)
         return { success: true }
       }
       return { success: false, error: error || "用户名或密码错误" }
@@ -57,7 +57,6 @@ export const useAuthStore = create<AuthStore>((set) => ({
       const { user, error } = await authRequest("/api/auth/register", { username: cleanUsername, password })
       if (user) {
         set({ user })
-        localStorage.setItem("userId", user.id)
         return { success: true }
       }
       return { success: false, error: error || "注册失败，请稍后重试" }
@@ -68,7 +67,10 @@ export const useAuthStore = create<AuthStore>((set) => ({
 
   logout: () => {
     set({ user: null })
+    // Clear the server session cookie; also wipe the legacy localStorage id
+    // written by older versions of the app
     localStorage.removeItem("userId")
+    fetch("/api/auth/logout", { method: "POST" }).catch(() => {})
   },
 
   checkAuth: async () => {
@@ -76,22 +78,22 @@ export const useAuthStore = create<AuthStore>((set) => ({
       set({ isLoading: false })
       return
     }
-    const userId = localStorage.getItem("userId")
-    if (!userId) {
-      set({ isLoading: false })
-      return
-    }
     try {
-      const res = await fetch(`/api/auth/me?id=${userId}`)
+      // Identity is derived from the session cookie server-side
+      const res = await fetch("/api/auth/me")
       if (res.ok) {
         const data = await res.json()
         set({ user: data.user, isLoading: false })
+      } else if (res.status === 401) {
+        localStorage.removeItem("userId")
+        set({ user: null, isLoading: false })
       } else if (res.status === 404) {
-        // User strictly deleted or doesn't exist
+        // Session valid but the user no longer exists — clear the stale session
+        fetch("/api/auth/logout", { method: "POST" }).catch(() => {})
         localStorage.removeItem("userId")
         set({ user: null, isLoading: false })
       } else {
-        // Database timeout or 500 error - don't remove userId, allow retry
+        // Database timeout or 500 error - don't clear session, allow retry
         set({ isLoading: false })
       }
     } catch {

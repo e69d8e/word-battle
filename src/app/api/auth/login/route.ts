@@ -1,27 +1,38 @@
 import { NextRequest } from "next/server"
 import { prisma } from "@/lib/db"
 import { apiError, apiSuccess } from "@/lib/api"
+import { setSessionCookie } from "@/lib/auth"
+import { rateLimit, getClientIp } from "@/lib/rate-limit"
 import bcrypt from "bcryptjs"
+import { z } from "zod"
+
+const loginSchema = z.object({
+  username: z.string().min(1).max(20),
+  password: z.string().min(1).max(200),
+})
 
 export async function POST(req: NextRequest) {
   try {
-    const { username, password } = await req.json()
+    if (!rateLimit(`login:${getClientIp(req)}`, 10, 60_000)) {
+      return apiError("尝试过于频繁，请一分钟后再试", 429)
+    }
 
-    if (!username || !password) {
+    const parsed = loginSchema.safeParse(await req.json())
+    if (!parsed.success) {
       return apiError("用户名和密码不能为空", 400)
     }
+    const { username, password } = parsed.data
 
     const user = await prisma.user.findUnique({ where: { username } })
-    if (!user) {
-      return apiError("用户不存在，请先注册", 401)
+
+    // Single message for both unknown user and wrong password to prevent
+    // account enumeration
+    const isValidPassword = user ? await bcrypt.compare(password, user.password) : false
+    if (!user || !isValidPassword) {
+      return apiError("用户名或密码错误", 401)
     }
 
-    const isValidPassword = await bcrypt.compare(password, user.password)
-    if (!isValidPassword) {
-      return apiError("密码错误，请重新输入", 401)
-    }
-
-    return apiSuccess({
+    const res = apiSuccess({
       user: {
         id: user.id,
         username: user.username,
@@ -29,6 +40,8 @@ export async function POST(req: NextRequest) {
         createdAt: user.createdAt,
       },
     })
+    await setSessionCookie(res, { userId: user.id, username: user.username })
+    return res
   } catch (error) {
     console.error("Login error:", error)
     return apiError("登录失败，请稍后重试")

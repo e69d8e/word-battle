@@ -1,0 +1,187 @@
+import { describe, it, expect, beforeEach, vi } from "vitest"
+import { NextRequest } from "next/server"
+import { POST, GET } from "./route"
+
+vi.mock("@/lib/db", () => ({
+  prisma: {
+    game: { create: vi.fn(), findUnique: vi.fn() },
+    score: { createMany: vi.fn() },
+    $transaction: vi.fn(),
+  },
+}))
+
+vi.mock("@/lib/auth", () => ({
+  getSessionFromRequest: vi.fn(),
+}))
+
+import { prisma } from "@/lib/db"
+import { getSessionFromRequest } from "@/lib/auth"
+
+const mockPrisma = vi.mocked(prisma, true)
+const mockSession = vi.mocked(getSessionFromRequest)
+
+const USER_ID = "11111111-1111-4111-8111-111111111111"
+const OPPONENT_ID = "22222222-2222-4222-8222-222222222222"
+
+function makeRequest(body: unknown, url = "http://localhost:3000/api/game") {
+  return new NextRequest(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  })
+}
+
+function validBody(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    mode: "ai",
+    wordLevel: "CET4",
+    score1: 1500,
+    score2: 800,
+    status: "finished",
+    questions: Array.from({ length: 10 }, () => ({
+      type: "en2cn",
+      options: ["a", "b", "c", "d"],
+      answer1: "a",
+      correct1: true,
+      time1: 5000,
+    })),
+    ...overrides,
+  }
+}
+
+beforeEach(() => {
+  vi.clearAllMocks()
+  mockSession.mockResolvedValue({ userId: USER_ID, username: "tester" })
+  mockPrisma.$transaction.mockImplementation(async (fn) =>
+    fn(mockPrisma as unknown as Parameters<typeof fn>[0])
+  )
+  mockPrisma.game.findUnique.mockResolvedValue(null)
+  mockPrisma.game.create.mockResolvedValue({ id: "game-1" } as never)
+  mockPrisma.score.createMany.mockResolvedValue({ count: 2 })
+})
+
+describe("POST /api/game — auth", () => {
+  it("returns 401 without a session", async () => {
+    mockSession.mockResolvedValue(null)
+    const res = await POST(makeRequest(validBody()))
+    expect(res.status).toBe(401)
+    expect(mockPrisma.game.create).not.toHaveBeenCalled()
+  })
+
+  it("ignores client-supplied player1Id and uses the session user", async () => {
+    await POST(makeRequest(validBody({ player1Id: OPPONENT_ID })))
+    expect(mockPrisma.game.create).toHaveBeenCalledTimes(1)
+    const data = mockPrisma.game.create.mock.calls[0]![0].data
+    expect(data.player1Id).toBe(USER_ID)
+  })
+})
+
+describe("POST /api/game — validation", () => {
+  it.each([
+    { name: "missing mode", patch: { mode: undefined } },
+    { name: "invalid mode", patch: { mode: "hack" } },
+    { name: "invalid level", patch: { wordLevel: "GMAT" } },
+    { name: "missing score1", patch: { score1: undefined } },
+    { name: "negative score", patch: { score1: -5 } },
+    { name: "non-integer score", patch: { score1: 1.5 } },
+  ])("rejects invalid body: $name", async ({ patch }) => {
+    const res = await POST(makeRequest(validBody(patch)))
+    expect(res.status).toBe(400)
+    expect(mockPrisma.game.create).not.toHaveBeenCalled()
+  })
+
+  it("rejects scores above the per-question cap (questions × 200)", async () => {
+    const res = await POST(makeRequest(validBody({ score1: 2001 })))
+    expect(res.status).toBe(400)
+  })
+
+  it("accepts a score at exactly questions × 200", async () => {
+    const res = await POST(makeRequest(validBody({ score1: 2000 })))
+    expect(res.status).toBe(200)
+  })
+
+  it("rejects more than 10 questions", async () => {
+    const body = validBody()
+    body.questions = Array.from({ length: 11 }, () => ({
+      type: "en2cn",
+      options: ["a", "b", "c", "d"],
+    }))
+    const res = await POST(makeRequest(body))
+    expect(res.status).toBe(400)
+  })
+
+  it("rejects unknown player2Id formats", async () => {
+    const res = await POST(makeRequest(validBody({ player2Id: "not-a-uuid" })))
+    expect(res.status).toBe(400)
+  })
+})
+
+describe("POST /api/game — winner & persistence", () => {
+  it("computes winner server-side (player2 wins when score2 > score1)", async () => {
+    await POST(makeRequest(validBody({ score1: 100, score2: 500, player2Id: OPPONENT_ID })))
+    const data = mockPrisma.game.create.mock.calls[0]![0].data
+    expect(data.winnerId).toBe(OPPONENT_ID)
+    expect(data.player2Id).toBe(OPPONENT_ID)
+  })
+
+  it("stores null winner on a draw", async () => {
+    await POST(makeRequest(validBody({ score1: 300, score2: 300, player2Id: OPPONENT_ID })))
+    expect(mockPrisma.game.create.mock.calls[0]![0].data.winnerId).toBeNull()
+  })
+
+  it("writes leaderboard scores for both players when finished", async () => {
+    await POST(makeRequest(validBody({ player2Id: OPPONENT_ID })))
+    expect(mockPrisma.score.createMany).toHaveBeenCalledTimes(1)
+    const rows = mockPrisma.score.createMany.mock.calls[0]![0]!.data
+    expect(rows).toHaveLength(2)
+  })
+
+  it("does not write leaderboard scores for unfinished games", async () => {
+    await POST(makeRequest(validBody({ status: "playing" })))
+    expect(mockPrisma.score.createMany).not.toHaveBeenCalled()
+  })
+})
+
+describe("POST /api/game — idempotency", () => {
+  it("returns the existing game when clientId was already saved", async () => {
+    const existing = { id: "game-existing", clientId: "33333333-3333-4333-8333-333333333333" }
+    mockPrisma.game.findUnique.mockResolvedValue(existing as never)
+
+    const res = await POST(
+      makeRequest(validBody({ clientId: "33333333-3333-4333-8333-333333333333" }))
+    )
+
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.game.id).toBe("game-existing")
+    expect(body.duplicate).toBe(true)
+    expect(mockPrisma.game.create).not.toHaveBeenCalled()
+  })
+})
+
+describe("GET /api/game", () => {
+  it("returns 401 without a session", async () => {
+    mockSession.mockResolvedValue(null)
+    const req = new NextRequest("http://localhost:3000/api/game")
+    const res = await GET(req)
+    expect(res.status).toBe(401)
+  })
+
+  it("scopes results to the session user only (ignores userId param)", async () => {
+    mockPrisma.game.findMany = vi.fn().mockResolvedValue([])
+    const req = new NextRequest(
+      `http://localhost:3000/api/game?userId=${OPPONENT_ID}&limit=abc`
+    )
+    const res = await GET(req)
+
+    expect(res.status).toBe(200)
+    expect(mockPrisma.game.findMany).toHaveBeenCalledTimes(1)
+    const args = mockPrisma.game.findMany.mock.calls[0]![0]!
+    expect(args.where!.OR).toEqual([
+      { player1Id: USER_ID },
+      { player2Id: USER_ID },
+    ])
+    // `limit=abc` falls back to 20 instead of producing NaN
+    expect(args.take).toBe(20)
+  })
+})

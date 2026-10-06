@@ -1,18 +1,18 @@
 import { NextRequest } from "next/server"
 import { prisma } from "@/lib/db"
 import { apiError, apiSuccess } from "@/lib/api"
+import { getSessionFromRequest } from "@/lib/auth"
 
 export async function GET(req: NextRequest) {
   try {
-    const { searchParams } = new URL(req.url)
-    const userId = searchParams.get("id")
-
-    if (!userId) {
-      return apiError("缺少用户ID", 400)
+    // Identity comes from the session cookie — never from a query param
+    const session = await getSessionFromRequest(req)
+    if (!session) {
+      return apiError("未登录", 401)
     }
 
     const user = await prisma.user.findUnique({
-      where: { id: userId },
+      where: { id: session.userId },
       select: { id: true, username: true, avatar: true, createdAt: true },
     })
 

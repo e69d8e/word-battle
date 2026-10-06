@@ -248,6 +248,8 @@ export default function GamePage() {
         score1: finalScore1,
         score2: finalScore2,
         status: "finished",
+        // Idempotency key — a retried save won't create a duplicate game
+        clientId: crypto.randomUUID(),
         questions: finalQuestions.map((q) => ({
           wordId: q.word.id,
           type: q.type,

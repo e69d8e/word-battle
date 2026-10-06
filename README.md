@@ -61,11 +61,11 @@
 $$\text{单题总分} = \text{基础分} + \text{速度奖励分} + \text{连击加成分}$$
 
 - **基础得分（Base Score）**：答对得 **100 分**，答错得 **0 分**。
-- **速度奖励（Time Bonus）**：$$\text{Bonus} = \max\left(0, \left\lfloor \frac{15000 - \text{答题耗时(ms)}}{100} \right\rfloor\right)$$（最高可得 **50 分**）。
+- **速度奖励（Time Bonus）**：$$\text{Bonus} = \min\left(50,\ \max\left(0, \left\lfloor \frac{15000 - \text{答题耗时(ms)}}{100} \right\rfloor\right)\right)$$（最高可得 **50 分**）。
 - **连击加成（Combo Bonus）**：
   - 连续答对第 2 题起触发连击奖励：$$\text{Combo Bonus} = \min\left(50, (\text{当前连击数} - 1) \times 10\right)$$（最高可得 **50 分**）。
   - 答错或超时将立即中断连击，连击数重置为 **0**。
-- **单题满分**：最高 **200 分**；单局 10 题理论巅峰得分为 **2,279+ 分**。
+- **单题满分**：最高 **200 分**；单局 10 题全对的理论巅峰得分为 **1,950 分**（首题无连击加成）。
 
 ---
 
