@@ -114,6 +114,36 @@ export default function GamePage() {
   const timeoutRef = useRef(false)
   const answeredRef = useRef(false) // Track if current question has been answered
 
+  // Pending async work — must be cancelled on unmount / game restart so stale
+  // timeouts can't mutate a freshly started game
+  const advanceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const aiTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const countdownTimersRef = useRef<ReturnType<typeof setTimeout>[]>([])
+
+  const clearAllGameTimers = useCallback(() => {
+    if (advanceTimerRef.current) {
+      clearTimeout(advanceTimerRef.current)
+      advanceTimerRef.current = null
+    }
+    if (aiTimerRef.current) {
+      clearTimeout(aiTimerRef.current)
+      aiTimerRef.current = null
+    }
+    countdownTimersRef.current.forEach(clearTimeout)
+    countdownTimersRef.current = []
+  }, [])
+
+  // Opponent's user id (realtime mode) — passed via URL for game saving
+  const opponentIdRef = useRef<string>("")
+  useEffect(() => {
+    const opponentId = new URLSearchParams(window.location.search).get("opponentId")
+    if (opponentId) opponentIdRef.current = opponentId
+  }, [])
+
+  useEffect(() => {
+    return () => clearAllGameTimers()
+  }, [clearAllGameTimers])
+
   // AI answer helper — used by both handleTimeout and handleAnswer
   const getAIAnswer = useCallback(() => {
     const state = useGameStore.getState()
@@ -214,6 +244,7 @@ export default function GamePage() {
         mode: finalMode,
         wordLevel: finalWordLevel,
         player1Id: user.id,
+        player2Id: finalMode === "realtime" ? opponentIdRef.current || null : null,
         score1: finalScore1,
         score2: finalScore2,
         status: "finished",
@@ -242,7 +273,9 @@ export default function GamePage() {
 
   // Advance game: next question or finish — shared by handleTimeout and handleAnswer
   const advanceGame = useCallback((delay: number) => {
-    setTimeout(() => {
+    if (advanceTimerRef.current) clearTimeout(advanceTimerRef.current)
+    advanceTimerRef.current = setTimeout(() => {
+      advanceTimerRef.current = null
       const state = useGameStore.getState()
       if (state.currentIndex < state.questions.length - 1) {
         nextQuestion()
@@ -286,23 +319,20 @@ export default function GamePage() {
     if (mode === "realtime" && channelRef.current && user) {
       const state = useGameStore.getState()
       const q = state.questions[state.currentIndex]
-      channelRef.current.send({
-        type: "broadcast",
-        event: "answer-submitted",
-        payload: {
-          playerId: user.id,
-          username: user.username,
-          questionId: q?.id,
-          answer: "",
-          timeMs: questionTimeLimit * 1000,
-          isCorrect: false,
-          totalScore: state.score1,
-          combo: state.combo1,
-          maxCombo: state.maxCombo1,
-          lastScoreGained: 0,
-          score: 0,
-        },
-      })
+      if (q) {
+        channelRef.current.send({
+          type: "broadcast",
+          event: "answer-submitted",
+          payload: {
+            playerId: user.id,
+            username: user.username,
+            questionId: q.id,
+            answer: "",
+            timeMs: questionTimeLimit * 1000,
+            isCorrect: false,
+          },
+        })
+      }
     }
 
     if (mode === "ai") getAIAnswer()
@@ -310,7 +340,7 @@ export default function GamePage() {
     advanceGame(1000)
   }, [mode, submitAnswer, getAIAnswer, advanceGame, user])
 
-  const resetAllRematchState = () => {
+  const resetAllRematchState = useCallback(() => {
     rematchRequestedRef.current = false
     opponentRematchRef.current = false
     setIsWaitingForRematch(false)
@@ -321,10 +351,11 @@ export default function GamePage() {
     setIsWaitingForOpponent(false)
     opponentFinishedRef.current = false
     selfFinishedRef.current = false
-  }
+  }, [])
 
   const startRematch = useCallback(() => {
     console.log("[Rematch] Starting rematch, isHost:", isHostRef.current)
+    clearAllGameTimers()
     resetAllRematchState()
 
     if (isHostRef.current) {
@@ -347,12 +378,20 @@ export default function GamePage() {
       setTimerKey((k) => k + 1)
       initGame("realtime", selectedLevelRef.current, wordsRef.current, totalQuestions, presetQuestions)
     }
-  }, [totalQuestions, initGame, resetGame])
+  }, [totalQuestions, initGame, resetGame, clearAllGameTimers, resetAllRematchState])
 
   const startRematchRef = useRef(startRematch)
   useEffect(() => {
     startRematchRef.current = startRematch
   }, [startRematch])
+
+  // Channel handlers must reach handleGameEnd through a ref: putting the
+  // callback itself in the channel effect's deps would tear down and
+  // re-subscribe the channel mid-game (it changes when opponentUsername does).
+  const handleGameEndRef = useRef(handleGameEnd)
+  useEffect(() => {
+    handleGameEndRef.current = handleGameEnd
+  }, [handleGameEnd])
 
   // Subscribe to realtime channel for multiplayer answer sync
   useEffect(() => {
@@ -451,7 +490,7 @@ export default function GamePage() {
             console.log("[Realtime] Both finished, ending game")
             setIsWaitingForOpponent(false)
             finishGame()
-            handleGameEnd()
+            handleGameEndRef.current()
           } else {
             console.log("[Realtime] Waiting for self to finish")
           }
@@ -516,7 +555,11 @@ export default function GamePage() {
         supabase.removeChannel(channel)
       }
     }
-  }, [mode, user?.id, finishGame, handleGameEnd, initGame, resetGame, syncOpponentAnswer, syncOpponentFinished])
+    // Deps are intentionally minimal: every callback used by the handlers is a
+    // stable store action or reads from refs. Including volatile callbacks here
+    // (e.g. handleGameEnd, which changes when opponentUsername changes) would
+    // tear down and re-subscribe the channel mid-game, dropping broadcasts.
+  }, [mode, user?.id, finishGame, initGame, resetGame, resetAllRematchState, syncOpponentAnswer, syncOpponentFinished])
 
   const currentQuestion = questions[currentIndex]
   const hasAnswered = currentQuestion ? !!answers1[currentQuestion.id] : false
@@ -551,6 +594,16 @@ export default function GamePage() {
     }
   }, [timeLeft, status, handleTimeout])
 
+  // Safety: game finished but result never got set (e.g. saving crashed) —
+  // reset in an effect; calling a store setter during render is impure and can
+  // double-fire under StrictMode / concurrent rendering.
+  useEffect(() => {
+    if (status === "finished" && !result) {
+      clearAllGameTimers()
+      resetGame()
+    }
+  }, [status, result, resetGame, clearAllGameTimers])
+
   const handleAnswer = useCallback(
     (answer: string, timeMs: number) => {
       if (answeredRef.current) return
@@ -563,27 +616,28 @@ export default function GamePage() {
         const state = useGameStore.getState()
         const q = state.questions[state.currentIndex]
 
-        channelRef.current.send({
-          type: "broadcast",
-          event: "answer-submitted",
-          payload: {
-            playerId: user.id,
-            username: user.username,
-            questionId: q?.id,
-            answer,
-            timeMs,
-            isCorrect: state.answers1[q?.id || ""]?.correct || false,
-            totalScore: state.score1,
-            combo: state.combo1,
-            maxCombo: state.maxCombo1,
-            lastScoreGained: state.lastScoreGained1,
-            score: state.lastScoreGained1,
-          },
-        })
+        if (q) {
+          channelRef.current.send({
+            type: "broadcast",
+            event: "answer-submitted",
+            payload: {
+              playerId: user.id,
+              username: user.username,
+              questionId: q.id,
+              answer,
+              timeMs,
+              isCorrect: state.answers1[q.id]?.correct || false,
+            },
+          })
+        }
       }
 
       if (mode === "ai") {
-        setTimeout(() => getAIAnswer(), 500)
+        if (aiTimerRef.current) clearTimeout(aiTimerRef.current)
+        aiTimerRef.current = setTimeout(() => {
+          aiTimerRef.current = null
+          getAIAnswer()
+        }, 500)
       }
 
       advanceGame(1500)
@@ -607,7 +661,9 @@ export default function GamePage() {
     }
 
     resetAllRematchState()
+    clearAllGameTimers()
     opponentUsernameRef.current = ""
+    opponentIdRef.current = ""
     setOpponentUsername("")
     resetGame()
     setResult(null)
@@ -616,19 +672,28 @@ export default function GamePage() {
     setMatchCountdown(3)
     sound.playCountdownTick(false)
 
-    setTimeout(() => {
+    const timers: ReturnType<typeof setTimeout>[] = []
+    countdownTimersRef.current = timers
+    const later = (fn: () => void, ms: number) => {
+      timers.push(setTimeout(() => {
+        fn()
+      }, ms))
+    }
+
+    later(() => {
       setMatchCountdown(2)
       sound.playCountdownTick(false)
 
-      setTimeout(() => {
+      later(() => {
         setMatchCountdown(1)
         sound.playCountdownTick(false)
 
-        setTimeout(() => {
+        later(() => {
           setMatchCountdown(0) // "GO!"
           sound.playCountdownTick(true)
 
-          setTimeout(() => {
+          later(() => {
+            countdownTimersRef.current = []
             setMatchCountdown(null)
             setTimerKey((k) => k + 1)
             initGame(selectedMode, selectedLevel, words, totalQuestions)
@@ -816,6 +881,7 @@ export default function GamePage() {
                 payload: { playerId: user.id },
               })
             }
+            clearAllGameTimers()
             resetAllRematchState()
             resetGame()
             setResult(null)
@@ -828,10 +894,7 @@ export default function GamePage() {
   }
 
   // Safety: game finished but result not set — go back to menu
-  if (status === "finished" && !result) {
-    resetGame()
-    return null
-  }
+  if (status === "finished" && !result) return null
 
   // Game playing screen
   if (!currentQuestion) return null

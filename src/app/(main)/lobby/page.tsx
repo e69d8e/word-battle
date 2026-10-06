@@ -54,7 +54,6 @@ function LobbyContent() {
   const [selectedLevel, setSelectedLevel] = useState<WordLevel>("CET4")
   const { words } = useWords(selectedLevel)
   const wordsRef = useRef<typeof words>([])
-  const isHostRef = useRef(false)
 
   // Keep wordsRef and playerIdRef in sync
   useEffect(() => {
@@ -134,40 +133,64 @@ function LobbyContent() {
         setStatus("playing")
       })
       .on("broadcast", { event: "game-started" }, ({ payload }) => {
-        if (isHostRef.current) {
-          isHostRef.current = false
-          return
-        }
+        // Host is always room.players[0] — ignore the echo of our own broadcast
         const currentRoom = roomRef.current
-        const opponent = currentRoom?.players.find((p) => p.id !== playerIdRef.current)?.username || ""
+        if (currentRoom?.players[0]?.id === playerIdRef.current) return
+        const opponent = currentRoom?.players.find((p) => p.id !== playerIdRef.current)
         sound.playGameStart()
         initGame("realtime", selectedLevel, wordsRef.current, payload.totalQuestions, payload.questions)
-        router.push(`/game?roomId=${rid}&opponent=${encodeURIComponent(opponent)}`)
+        const opponentParams = opponent
+          ? `&opponent=${encodeURIComponent(opponent.username)}&opponentId=${encodeURIComponent(opponent.id)}`
+          : ""
+        router.push(`/game?roomId=${rid}${opponentParams}`)
       })
       .on("broadcast", { event: "player-left" }, ({ payload }) => {
         updateRoom(payload.room)
-        setError("对手已离开房间")
+        setError(`${payload.username || "对手"} 已离开房间`)
       })
       .on("broadcast", { event: "request-state" }, ({ payload }) => {
         const currentRoom = roomRef.current
-        if (currentRoom) {
-          const playerExists = currentRoom.players.some((p) => p.id === payload.playerId)
-          const updatedRoom = playerExists
-            ? currentRoom
-            : {
-                ...currentRoom,
-                players: [
-                  ...currentRoom.players,
-                  { id: payload.playerId, username: payload.username, ready: false },
-                ],
-              }
-          updateRoom(updatedRoom)
+        if (!currentRoom) return
+        const playerExists = currentRoom.players.some((p) => p.id === payload.playerId)
+        if (!playerExists && currentRoom.players.length >= 2) {
+          // Room is full — tell the joiner instead of silently adding a 3rd player
           channel.send({
             type: "broadcast",
-            event: "room-update",
-            payload: { room: updatedRoom },
+            event: "room-full",
+            payload: { roomId: currentRoom.id },
           })
+          return
         }
+        const updatedRoom = playerExists
+          ? currentRoom
+          : {
+              ...currentRoom,
+              players: [
+                ...currentRoom.players,
+                { id: payload.playerId, username: payload.username, ready: false },
+              ],
+            }
+        updateRoom(updatedRoom)
+        channel.send({
+          type: "broadcast",
+          event: "room-update",
+          payload: { room: updatedRoom },
+        })
+      })
+      .on("broadcast", { event: "room-full" }, () => {
+        if (joinTimeoutRef.current) {
+          clearTimeout(joinTimeoutRef.current)
+          joinTimeoutRef.current = null
+        }
+        setError("房间已满（2 人），无法加入")
+        setStatus("idle")
+        const supabase = getSupabase()
+        if (channelRef.current && supabase) {
+          supabase.removeChannel(channelRef.current)
+        }
+        channelRef.current = null
+        setRoom(null)
+        setRoomId("")
       })
       .subscribe()
 
@@ -267,16 +290,14 @@ function LobbyContent() {
   }, [user, joinRoomId, subscribeToRoom])
 
   const handleReady = useCallback(async () => {
-    if (!channelRef.current || !roomId || !user) return
+    if (!channelRef.current || !roomId || !user || !room) return
     sound.playClick()
 
-    const updatedPlayers = room?.players.map((p) =>
-      p.id === playerIdRef.current ? { ...p, ready: true } : p
-    ) || []
-
     const updatedRoom: RoomState = {
-      ...room!,
-      players: updatedPlayers,
+      ...room,
+      players: room.players.map((p) =>
+        p.id === playerIdRef.current ? { ...p, ready: true } : p
+      ),
     }
 
     roomRef.current = updatedRoom
@@ -290,10 +311,13 @@ function LobbyContent() {
   }, [roomId, user, room])
 
   const handleStartGame = useCallback(async () => {
-    if (!channelRef.current || !roomId || words.length < 10) return
+    if (!channelRef.current || !roomId || !room) return
+    // Only the host (players[0]) may start — prevents both players generating
+    // different question sets when both click around the same time
+    if (room.players[0]?.id !== playerIdRef.current) return
+    if (room.players.length < 2 || words.length < 10) return
 
     const questions = generateQuestions(words, 10)
-    isHostRef.current = true
 
     await channelRef.current.send({
       type: "broadcast",
@@ -302,12 +326,47 @@ function LobbyContent() {
     })
 
     sound.playGameStart()
-    const opponent = room?.players.find((p) => p.id !== playerIdRef.current)?.username || ""
+    const opponent = room.players.find((p) => p.id !== playerIdRef.current)
+    const opponentParams = opponent
+      ? `&opponent=${encodeURIComponent(opponent.username)}&opponentId=${encodeURIComponent(opponent.id)}`
+      : ""
     initGame("realtime", selectedLevel, words, questions.length, questions)
-    router.push(`/game?roomId=${roomId}&isHost=true&opponent=${encodeURIComponent(opponent)}`)
-  }, [roomId, words, initGame, router, selectedLevel, room])
+    router.push(`/game?roomId=${roomId}&isHost=true${opponentParams}`)
+  }, [roomId, room, words, initGame, router, selectedLevel])
+
+  const handleLeaveRoom = useCallback(() => {
+    const channel = channelRef.current
+    const supabase = getSupabase()
+    // Tell the other player before tearing down so they don't wait forever
+    if (channel && roomRef.current) {
+      const remainingRoom: RoomState = {
+        ...roomRef.current,
+        players: roomRef.current.players.filter((p) => p.id !== playerIdRef.current),
+      }
+      channel.send({
+        type: "broadcast",
+        event: "player-left",
+        payload: { room: remainingRoom, username: user?.username },
+      })
+    }
+    if (joinTimeoutRef.current) {
+      clearTimeout(joinTimeoutRef.current)
+      joinTimeoutRef.current = null
+    }
+    if (channel && supabase) {
+      supabase.removeChannel(channel)
+    }
+    channelRef.current = null
+    setRoom(null)
+    setRoomId("")
+    setStatus("idle")
+  }, [user])
 
   const isCurrentUserReady = room?.players.find((p) => p.id === playerId)?.ready ?? false
+  // Host is always the room creator (players[0]); if they leave, the remaining
+  // player becomes players[0] and inherits the host role
+  const isHost = room?.players[0]?.id === playerId
+  const allPlayersReady = room?.players.length === 2 && room.players.every((p) => p.ready)
 
   if (isLoading) {
     return (
@@ -519,6 +578,7 @@ function LobbyContent() {
                         </div>
                         <div>
                           <p className="font-semibold text-sm text-ink">
+                            {player.id === room.players[0]?.id && <span className="mr-1">👑</span>}
                             {player.username} {isMe && <span className="text-xs text-muted font-normal">(我)</span>}
                           </p>
                           <p className="text-[11px] text-muted">在线</p>
@@ -555,7 +615,7 @@ function LobbyContent() {
                 {isCurrentUserReady ? "✅ 我已准备就绪" : "👉 点击准备"}
               </Button>
 
-              {room.players.length === 2 && room.players.every((p) => p.ready) && (
+              {allPlayersReady && isHost && (
                 <Button
                   variant="primary"
                   size="lg"
@@ -566,24 +626,22 @@ function LobbyContent() {
                 </Button>
               )}
 
+              {allPlayersReady && !isHost && (
+                <Button
+                  variant="outline"
+                  size="lg"
+                  className="flex-1"
+                  disabled
+                >
+                  ⏳ 已就绪，等待房主开战...
+                </Button>
+              )}
+
               <Button
                 variant="outline"
                 size="lg"
                 className="sm:w-32"
-                onClick={() => {
-                  if (joinTimeoutRef.current) {
-                    clearTimeout(joinTimeoutRef.current)
-                    joinTimeoutRef.current = null
-                  }
-                  if (channelRef.current) {
-                    const supabase = getSupabase()
-                    if (supabase) supabase.removeChannel(channelRef.current)
-                    channelRef.current = null
-                  }
-                  setRoom(null)
-                  setRoomId("")
-                  setStatus("idle")
-                }}
+                onClick={handleLeaveRoom}
               >
                 离开房间
               </Button>
