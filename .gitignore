@@ -55,3 +55,6 @@ prisma/dev.db
 # Compiled Electron main process
 /dist-electron/
 .zcode/
+
+# Playwright CLI test artifacts
+/.playwright-cli/
