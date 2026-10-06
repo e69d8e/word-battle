@@ -100,6 +100,26 @@ describe("POST /api/game — validation", () => {
     expect(res.status).toBe(200)
   })
 
+  it("rounds fractional client timer values before persisting", async () => {
+    // AI answers use Math.random()-derived times which are fractional floats
+    const body = validBody()
+    body.questions = Array.from({ length: 10 }, () => ({
+      type: "en2cn",
+      options: ["a", "b", "c", "d"],
+      answer1: "a",
+      correct1: true,
+      time1: 5432.87,
+      time2: 2100.5,
+    }))
+    const res = await POST(makeRequest(body))
+    expect(res.status).toBe(200)
+    const created = mockPrisma.game.create.mock.calls[0]![0].data.questions! as unknown as {
+      create: Array<{ time1: number; time2: number }>
+    }
+    expect(created.create[0].time1).toBe(5433)
+    expect(created.create[0].time2).toBe(2101)
+  })
+
   it("rejects more than 10 questions", async () => {
     const body = validBody()
     body.questions = Array.from({ length: 11 }, () => ({

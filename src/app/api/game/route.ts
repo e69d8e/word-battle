@@ -15,8 +15,10 @@ const questionSchema = z.object({
   answer2: z.string().max(500).nullish(),
   correct1: z.boolean().optional(),
   correct2: z.boolean().optional(),
-  time1: z.number().int().min(0).max(120_000).nullish(),
-  time2: z.number().int().min(0).max(120_000).nullish(),
+  // Time may arrive as a float from client timers — validated as number here
+  // and rounded to an integer at write time (the DB column is Int).
+  time1: z.number().min(0).max(120_000).nullish(),
+  time2: z.number().min(0).max(120_000).nullish(),
 })
 
 const gameSchema = z
@@ -101,8 +103,8 @@ export async function POST(req: NextRequest) {
                   answer2: q.answer2 ?? null,
                   correct1: q.correct1 || false,
                   correct2: q.correct2 || false,
-                  time1: q.time1 ?? null,
-                  time2: q.time2 ?? null,
+                  time1: q.time1 == null ? null : Math.round(q.time1),
+                  time2: q.time2 == null ? null : Math.round(q.time2),
                 })),
               }
             : undefined,

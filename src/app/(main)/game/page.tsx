@@ -154,7 +154,7 @@ export default function GamePage() {
     const aiAnswer = aiCorrect
       ? q.correctAnswer
       : wrongOptions[Math.floor(Math.random() * wrongOptions.length)]
-    const aiTime = (Math.random() * 8 + 2) * 1000
+    const aiTime = Math.round((Math.random() * 8 + 2) * 1000)
     submitAnswer(2, aiAnswer || "", aiTime)
   }, [submitAnswer])
 
