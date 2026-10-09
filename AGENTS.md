@@ -55,12 +55,18 @@ No test framework is configured. The Next.js docs at `node_modules/next/dist/doc
 - **Game:** `/api/game` (POST to save, GET to list)
 - **Words:** `/api/words?level=CET4` — auto-seeds from `src/data/words/{level}.json` on first request if level doesn't exist in DB
 - **Leaderboard:** `/api/leaderboard` (GET, grouped high scores)
+- **Rooms:** `/api/rooms` (POST, allocate code), `/api/rooms/join`, `/api/rooms/leave`, `/api/rooms/start` — server-side lobby reservations
 
 ### Realtime Multiplayer (Supabase Realtime)
 Uses Supabase Realtime channels (`src/lib/supabase.ts`):
-- **Room system:** Create/join rooms with unique room IDs (channel name: `room:{id}`)
+- **Room registry:** codes are allocated server-side (`POST /api/rooms`, `Room` table, 6 chars, 30-min TTL) and the second seat is claimed atomically (`POST /api/rooms/join`); `leave`/`start` release and extend it. Client-side `Math.random()` codes are gone.
+- **Two topics per room:** `room:{id}` (lobby handshake) and `room:{id}:play` (the match), so the lobby's presence teardown during the hand-off is not mistaken for the opponent leaving.
 - **Game synchronization:** Real-time answer submission, score updates, question progression via broadcast events
-- **Events:** `room-update`, `game-start`, `game-started`, `player-left`
+- **Events:** `room-update`, `request-state`, `room-full`, `game-started`, `player-left`, `answer-submitted`, `player-finished`, `request-game-state`/`game-state`, `game-ended`, `rematch-requested`
+- **Host authority:** `players[0]` is the host — it alone answers `request-state`, alone starts the match, and alone persists the finished game.
+- **Liveness + resume:** presence (`enabled: true` + pre-subscribe handlers + `track()`) detects a dropped peer; a reload resumes from a `sessionStorage` snapshot (`src/lib/realtime-session.ts`) and re-syncs with `game-state`.
+- **Peer data is untrusted:** scores/combos are recomputed locally from the answer map (`scoreForAnswer` / `recomputeFromAnswers` in `gameStore.ts`); a peer's claimed `finalScore` is ignored.
+- **Verification:** `npm run smoke:realtime` checks the live project for the transport behaviour the flow assumes (broadcast both ways, presence opt-in + `leave`, hand-off isolation, play-topic traffic, `self: true` echo).
 
 ### Database (Supabase PostgreSQL via Prisma)
 Key models: User, WordList, Word, Game, GameQuestion, Score. See `prisma/schema.prisma` for full schema.

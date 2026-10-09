@@ -58,16 +58,26 @@ All handlers use shared helpers `apiSuccess()` / `apiError()` from `src/lib/api.
 - **Game:** `/api/game` (POST saves `Game` + cascading `GameQuestion` rows + per-player `Score` rows; GET lists games for a userId with optional mode filter)
 - **Words:** `/api/words?level=CET4` — serves from in-memory JSON (`src/data/words/{level}.json`); on first request seeds `WordList`/`Word` rows into the DB if missing. Response is `Cache-Control: public, max-age=3600, s-maxage=86400, stale-while-revalidate=86400`; on DB failure falls back to JSON with shorter TTL
 - **Leaderboard:** `/api/leaderboard?mode=&level=&limit=` — uses Prisma `groupBy` to compute per-user max score, then joins `user` for username. Returns `{ rank, userId, username, score }[]`
+- **Rooms:** `/api/rooms` (POST, allocate a code), `/api/rooms/join` (POST, claim the second seat), `/api/rooms/leave` (POST, release/close), `/api/rooms/start` (POST, mark playing + extend TTL). Helpers in `src/lib/rooms.ts`; all require a session and never expose player ids (`toPublicRoom`).
 
 ### Realtime Multiplayer (Supabase Realtime)
-Uses Supabase Realtime channels (`src/lib/supabase.ts` — client-only, returns `null` on the server):
-- **Room system:** Create/join rooms with unique room IDs (channel name: `room:{roomId}`)
+Uses Supabase Realtime channels (`src/lib/supabase.ts` — client-only, returns `null` on the server). Wire protocol + pure join/capacity decisions live in `src/lib/realtime-protocol.ts` (unit-tested, `realtime-protocol.test.ts`):
+- **Room registry (server-owned):** `POST /api/rooms` allocates a unique 6-character code (unambiguous alphabet, `Room` table, 30-min TTL); `POST /api/rooms/join` claims the second seat with a conditional update; `POST /api/rooms/leave` frees/closes it (also called via `navigator.sendBeacon` on pagehide); `POST /api/rooms/start` extends the reservation when the match begins. The realtime handshake still runs afterwards as defence in depth.
+- **Two topics per room:** `room:{id}` (lobby) and `room:{id}:play` (the match) — kept apart so the lobby's presence teardown during the hand-off is not mistaken for the opponent leaving.
 - **Game synchronization:** Real-time answer submission, score updates, question progression via broadcast events
-- **Broadcast events emitted:** `room-update` (lobby state changes), `answer-submitted` (`{ answer, correct, time, score, username }`), `player-finished` (`{ username, finalScore, correctCount }`), `game-ended` (`{ winner, finalScores }`)
-- **Lobby UX:** `src/app/(main)/lobby/page.tsx` (615 lines) handles create/join room flow, room status, rematch requests
+- **Events:** lobby — `room-update`, `request-state`, `room-full`, `game-started`, `player-left`; match — `answer-submitted`, `player-finished`, `game-state`/`request-game-state`, `game-ended`, `rematch-requested`, `player-left`
+- **Host authority:** `players[0]` is the host — it alone answers `request-state`, alone starts/restarts the match, and alone POSTs the finished game (a non-host client must not save, or every match is stored twice).
+- **Liveness:** presence requires an opt-in — `subscribe()` enables it when `config.presence.enabled === true` **or** a presence binding was registered before `subscribe()` (which is why handlers must be attached before subscribing). The app does both and calls `track()` after SUBSCRIBE. A presence `leave` (10 s grace, so a reload can return) or an explicit `player-left` aborts an in-flight match and releases a stuck "waiting for opponent" overlay.
+- **Resume after reload:** `src/lib/realtime-session.ts` snapshots the in-progress match to `sessionStorage`; the game page rehydrates it on mount and asks the peer for `game-state`, so a refresh no longer strands the opponent. Finished matches are not resumable.
+- **Trust model:** living scores/combos come from local recomputation of the peer's answer map (`scoreForAnswer` / `recomputeFromAnswers`); `syncOpponentFinished` sanitizes ids/shapes and ignores the peer's claimed totals.
+- **Lobby UX:** `src/app/(main)/lobby/page.tsx` handles create/join room flow, room status, rematch requests
 
 ### Database (Supabase PostgreSQL via Prisma)
-Key models: User, WordList, Word, Game, GameQuestion, Score. See `prisma/schema.prisma` for full schema.
+Key models: User, WordList, Word, Game, GameQuestion, Score, Room. See `prisma/schema.prisma` for full schema.
+
+> Migrations are a single squashed baseline (`prisma/migrations/20261009080000_init`), so the history replays cleanly on a fresh/shadow database and `prisma migrate dev` works normally. The baseline is generated with `prisma migrate diff --from-empty --to-schema-datamodel prisma/schema.prisma --script`; `prisma migrate diff --from-migrations prisma/migrations --to-schema-datamodel prisma/schema.prisma --shadow-database-url <scratch-db>` must report an empty migration (it did, which is how the baseline was verified).
+>
+> The baseline also appends hardening that Prisma does not model: RLS is enabled (no policies) on every app table and `anon`/`authenticated` table privileges are revoked, including the default privileges for future tables. Supabase grants those PostgREST roles full DML on anything created in `public`, and the anon key is public (`NEXT_PUBLIC_SUPABASE_ANON_KEY`), which previously left `Game`/`Score`/`Word` readable **and writable** by anyone holding it — bypassing the API's score validation. The app reaches these tables only through Prisma as `postgres` (BYPASSRLS) and uses the anon key solely for Realtime, so this does not affect it. Keep the statements when regenerating the baseline.
 - Connection via `DATABASE_URL` (pooled) and `DIRECT_URL` (direct, for migrations)
 - `GameQuestion.options` is stored as JSON string (serialized array of 4 options)
 - `Score` has composite index on `(userId, mode, level)` for efficient leaderboard queries; `Score` is the data source for the leaderboard (one row per finished game)
@@ -111,12 +121,19 @@ src/
     questions.ts             # generateQuestion() + generateQuestions() (mixes en2cn/cn2en/listening)
     sound.ts                 # Web Audio API sound engine (zero deps, localStorage preference)
     utils.ts                 # cn(), shuffleArray(), getRandomItems(), generateId()
+    realtime-protocol.ts     # Room/play topics + pure join/capacity decisions (unit-tested)
+    realtime-session.ts      # sessionStorage resume snapshot for an in-progress match
+    rooms.ts                 # Room codes, TTL, public room shape (server-side reservations)
+    auth.ts                  # Session cookie helpers (getSessionFromRequest)
+    rate-limit.ts            # In-memory IP rate limiting for login/register
   types/                     # All TypeScript interfaces (User, WordItem, Question, GameState, GameResult, LeaderboardEntry)
   data/words/                # Word list JSON files (cet4.json, cet6.json, toefl.json, ielts.json)
 prisma/
   schema.prisma              # Database schema (PostgreSQL)
   seed.ts                    # Database seeder
 scripts/
+  realtime-smoke.mjs         # npm run smoke:realtime — live transport checks
+  db-restore.mjs             # npm run db:restore — restore a db-backup/*.json dump
   download-audio.js          # Download pronunciation audio from Youdao (runs in Netlify build)
   generate-words.js          # Generate word list JSONs
   import-dict.js             # Import dictionary data
@@ -197,15 +214,42 @@ The Netlify build runs `node scripts/download-audio.js` before `npm run build` t
 
 ## Realtime Protocol
 
-Supabase Realtime channel events (channel name: `room:{roomId}`):
-- `room-update` — lobby state changes (player joined/left)
-- `answer-submitted` — payload: `{ answer, correct, time, score, username }`
-- `player-finished` — payload: `{ username, finalScore, correctCount }`
-- `game-ended` — payload: `{ winner, finalScores }`
+Two Supabase Realtime topics per room: `room:{roomId}` while in the lobby, `room:{roomId}:play` during the match. Constants and the pure join/capacity decisions live in `src/lib/realtime-protocol.ts`.
+
+Server-side room registry (`Room` table): the code is allocated by `POST /api/rooms`, the second seat claimed by `POST /api/rooms/join` (conditional update), released by `POST /api/rooms/leave`, and extended by `POST /api/rooms/start`. A full/expired/unknown room is therefore rejected by the API *before* any channel work; the lobby broadcast handshake below is the second line of defence.
+
+Lobby (`room:{roomId}`):
+- `room-update` — lobby state changes (player joined/left/ready); the joiner keeps re-sending `request-state` until the host acknowledges it by including it in a `room-update`
+- `request-state` — joiner asks the host for the current room; **only the host (`players[0]`) replies**
+- `room-full` — host → joiner rejection when the room already has 2 players; carries `senderId` so the host and the sitting opponent ignore it (the channel uses `broadcast: { self: true }`, which echoes the sender's own messages)
+- `game-started` — host → joiner hand-off, payload `{ questions, totalQuestions, wordLevel }`
+- `player-left` — payload `{ room, username, playerId }`
+
+Match (`room:{roomId}:play`):
+- `answer-submitted` — payload `{ playerId, username, questionId, answer, timeMs, isCorrect }`
+- `player-finished` — payload `{ playerId, username, finalScore, maxCombo, answers }`; `finalScore`/`maxCombo` are advisory only — the receiver recomputes from `answers`
+- `request-game-state` / `game-state` — sent on (re)subscribe so a reloaded client catches up on answers it missed; payload `{ playerId, username, answers, finished }`
+- `game-ended` — payload `{ playerId, score }`
+- `rematch-requested` — payload `{ playerId }`
+- `player-left` — payload `{ playerId, username }`
+
+Presence is used for liveness on both topics. `RealtimeChannel.subscribe()` enables presence in the join payload when `config.presence.enabled === true` **or** a presence binding was registered before subscribing — a channel with neither never observes presence. On top of that, `channel.track()` is what publishes your own state, and adding a presence binding *after* `subscribe()` throws. So the app does all three: enable it in the config, register presence handlers before `subscribe()`, and `track()` on `SUBSCRIBED`. Verified by `npm run smoke:realtime`.
+
+Only the host POSTs the finished match to `/api/game` (see `isHostRef` in `src/app/(main)/game/page.tsx`); the joiner's client would otherwise create a second `Game` row for the same match.
+
+### Resume after reload
+
+The game state lives in memory, so a refresh used to drop the player back to the mode picker while their opponent waited. `src/lib/realtime-session.ts` stores a validated snapshot in `sessionStorage` (room id, questions, index, scores, answers, host flag, self-finished) keyed per room:
+- the game page writes it on every store change while the match is playing and drops it when the match finishes or the page unmounts (a real page unload does not run cleanup, so reloads resume)
+- on mount it rehydrates the snapshot, restores refs, resumes the pending question advance, and re-sends `player-finished` if the local player had finished
+- the peer answers `request-game-state` with `game-state`, so missed answers are recovered
+- presence leave waits 10 s before aborting, and a presence `join` cancels a pending abort — enough for a reloading tab to come back
 
 ## Utility Scripts
 
 Located in `scripts/`:
+- `realtime-smoke.mjs` — **`npm run smoke:realtime`**: checks the live Supabase project for the transport behaviour the multiplayer flow assumes (broadcast both ways, presence opt-in + `leave`, lobby→match hand-off isolation, play-topic traffic, `self: true` echo). Read-only, needs `.env` credentials, exits non-zero on failure
+- `db-restore.mjs` — **`npm run db:restore [file]`**: restores a `db-backup/*.json` dump into the database (User → Game → GameQuestion → Score, ids preserved, `skipDuplicates` so it is safe to re-run, `GameQuestion.wordId` remapped by level+text, password hashes copied verbatim so original passwords keep working)
 - `generate-words.js` — Generate word list JSON files from dictionary sources
 - `download-audio.js` — Download pronunciation audio files from Youdao API
 - `import-dict.js` — Import dictionary data into word lists

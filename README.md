@@ -80,22 +80,27 @@ sequenceDiagram
     participant S as Supabase Realtime (room:CODE)
     actor B as 玩家 B (Joiner)
 
-    Note over A,B: 房间就绪阶段
-    A->>S: createRoom & broadcast("room-update")
-    B->>S: joinRoom & broadcast("request-state")
+    Note over A,B: 建房阶段（服务端登记房间号）
+    A->>S: POST /api/rooms（登记房间 → 返回唯一 6 位房间码）
+    B->>S: POST /api/rooms/join（条件更新原子占座，满员/过期/不存在直接拒绝）
+
+    Note over A,B: 房间就绪阶段（topic: room:CODE）
+    A->>S: broadcast("room-update")
+    B->>S: broadcast("request-state")
+    Note over A,S: 只有房主 (players[0]) 应答加入请求
     A->>S: broadcast("room-update", { players: [A, B] })
-    A->>S: broadcast("game-started", { questions, totalQuestions })
+    A->>S: broadcast("game-started", { questions, totalQuestions, wordLevel })
     S-->>B: 同步题库并进入对战页
 
-    Note over A,B: 答题与实时同步阶段
+    Note over A,B: 答题阶段（切换到 topic: room:CODE:play，Presence 用于断线检测）
     A->>A: 本地提交答题 (计算 score1, combo1)
-    A->>S: broadcast("answer-submitted", { totalScore, combo, maxCombo, lastScoreGained, isCorrect })
-    S-->>B: syncOpponentAnswer (更新 score2, combo2, 触发浮动得分与🔥动画)
+    A->>S: broadcast("answer-submitted", { playerId, questionId, answer, timeMs, isCorrect })
+    S-->>B: syncOpponentAnswer（自行按公式重算 score2/combo2，不信任对方总分）
 
     Note over A,B: 终态结算阶段
-    A->>S: broadcast("player-finished", { finalScore, maxCombo, answers })
-    B->>S: broadcast("player-finished", { finalScore, maxCombo, answers })
-    Note over A,B: 双方终态数据校验无误后调用 finishGame() 并保存战报至 DB
+    A->>S: broadcast("player-finished", { answers })
+    B->>S: broadcast("player-finished", { answers })
+    Note over A,B: 双方各自从 answers 重算终态；仅房主 POST /api/game 落库，避免同一场对战重复入库
 ```
 
 ---
@@ -109,7 +114,7 @@ sequenceDiagram
 | **样式系统** | Tailwind CSS v4 + PostCSS | 定制化主题色板、响应式断点与流畅微动画 |
 | **状态管理** | Zustand | 轻量级高性能游戏状态机 (`gameStore`) 与鉴权状态 (`authStore`) |
 | **数据库** | PostgreSQL (Supabase) + Prisma 6 | ORM 数据持久化与高并发连接池支持 |
-| **实时通信** | Supabase Realtime | WebSocket 广播与 Presence 房间监听通道 |
+| **实时通信** | Supabase Realtime | WebSocket 广播（大厅 / 对战双 topic）+ Presence 在线与断线检测，房间号由服务端登记 |
 | **音频引擎** | Web Audio API + Web Speech API | 零第三方依赖合成音效 + 浏览器原声朗读 fallback |
 | **桌面客户端** | Electron 42 + Electron Builder | 支持跨平台桌面端独立打包 |
 | **部署托管** | Netlify (`@netlify/plugin-nextjs`) | 自动化 CI/CD 与 Edge 网络分发 |
@@ -122,6 +127,7 @@ sequenceDiagram
 erDiagram
     User ||--o{ Game : "player1 / player2"
     User ||--o{ Score : "records"
+    User ||--o{ Room : "host / guest"
     WordList ||--o{ Word : "contains"
     Word ||--o{ GameQuestion : "references"
     Game ||--o{ GameQuestion : "has"
@@ -148,6 +154,17 @@ erDiagram
         string meaningCn
         string example
         string listId FK
+    }
+
+    Room {
+        string id PK
+        string code UK
+        string status
+        string level
+        string hostId FK
+        string guestId FK
+        datetime createdAt
+        datetime expiresAt
     }
 
     Game {
@@ -197,11 +214,15 @@ erDiagram
 | :--- | :--- | :--- | :--- |
 | `POST` | `/api/auth/register` | `{ username, password }` | 用户注册（bcrypt 加密存储） |
 | `POST` | `/api/auth/login` | `{ username, password }` | 用户登录与凭证验证 |
-| `GET` | `/api/auth/me` | Query: `?userId=...` | 获取当前用户信息 |
+| `GET` | `/api/auth/me` | Cookie: `wb_session` | 获取当前登录用户信息 |
 | `GET` | `/api/words` | Query: `?level=CET4` | 获取指定等级单词库（首次请求自动从本地 JSON 种子入库） |
-| `POST` | `/api/game` | `{ mode, wordLevel, player1Id, score1, score2, questions }` | 保存游戏对局记录及天梯积分 |
-| `GET` | `/api/game` | Query: `?userId=...&mode=...&limit=20` | 查询用户历史对战记录 |
+| `POST` | `/api/game` | `{ mode, wordLevel, score1, score2, questions, clientId }` | 保存游戏对局记录及天梯积分（身份取自会话 Cookie，实时对战仅房主提交） |
+| `GET` | `/api/game` | Query: `?mode=...&limit=20` | 查询当前用户历史对战记录 |
 | `GET` | `/api/leaderboard`| Query: `?mode=...&level=CET4&limit=50` | 获取全球天梯排行榜 |
+| `POST` | `/api/rooms` | `{ level }` | 创建实时对战房间，返回唯一 6 位房间码（30 分钟有效） |
+| `POST` | `/api/rooms/join` | `{ code }` | 原子占座加入房间（满员 409 / 过期或不存在 404） |
+| `POST` | `/api/rooms/leave` | `{ code }` | 释放座位（房主离开即关闭房间），页面卸载时用 `sendBeacon` 调用 |
+| `POST` | `/api/rooms/start` | `{ code }` | 标记房间进入对战中并延长预留时间 |
 
 ---
 
@@ -250,7 +271,19 @@ npm run prisma:migrate
 npm run db:seed
 ```
 
-### 5. 启动服务
+> 迁移历史已压成单份 baseline（`prisma/migrations/20261009080000_init`），可在空库/影子库干净重放，`migrate dev` 可正常使用。该 baseline 额外包含 Prisma 不建模的加固语句：所有业务表启用 RLS（无 policy）并撤销 `anon`/`authenticated` 的读写权限（含未来新建表的默认权限）——否则任何拿到前端公开 anon key 的人都能通过 PostgREST 直接读写 `Game`/`Score`/`Word` 等表，绕过接口层的分数校验。应用只通过 Prisma（`postgres` 角色，BYPASSRLS）访问这些表，anon key 仅用于 Realtime，因此不受影响；重建 baseline 时请保留这些语句。
+
+### 5. 实时链路自检（可选）
+
+```bash
+# 校验真实 Supabase 项目的广播 / Presence / 双 topic 行为（只读，需 .env 凭证）
+npm run smoke:realtime
+
+# 从 db-backup/ 的转储恢复账号与战绩（默认取最新文件；可重复执行）
+npm run db:restore
+```
+
+### 6. 启动服务
 
 ```bash
 # 启动 Web 开发服务器 (localhost:3000)
