@@ -76,7 +76,12 @@ export async function POST(req: NextRequest) {
         include: { questions: true },
       })
       if (existing) {
-        return apiSuccess({ game: existing, duplicate: true })
+        // Only your own retry is a duplicate — otherwise one account could read
+        // (or block) another account's save by guessing the key
+        if (existing.player1Id === session.userId) {
+          return apiSuccess({ game: existing, duplicate: true })
+        }
+        return apiError("请求冲突，请重试", 409)
       }
     }
 
@@ -124,6 +129,13 @@ export async function POST(req: NextRequest) {
       }
 
       return createdGame
+    }, {
+      // The database is remote (Supabase): a save is ~6 round trips and has been
+      // measured between 4.6s and 9s, which intermittently blew past Prisma's
+      // 5s default and failed the whole save with P2028 ("Transaction already
+      // closed"). Give it room while staying under typical serverless limits.
+      maxWait: 8_000,
+      timeout: 12_000,
     })
 
     return apiSuccess({ game })

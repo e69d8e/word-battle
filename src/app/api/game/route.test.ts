@@ -149,8 +149,7 @@ describe("POST /api/game — winner & persistence", () => {
     expect(mockPrisma.game.create.mock.calls[0]![0].data.winnerId).toBeNull()
   })
 
-  it("writes leaderboard scores for both players when finished", async () => {
-    await POST(makeRequest(validBody({ player2Id: OPPONENT_ID })))
+  it("writes leaderboard scores for both players when finished", async () => {    await POST(makeRequest(validBody({ player2Id: OPPONENT_ID })))
     expect(mockPrisma.score.createMany).toHaveBeenCalledTimes(1)
     const rows = mockPrisma.score.createMany.mock.calls[0]![0]!.data
     expect(rows).toHaveLength(2)
@@ -160,11 +159,46 @@ describe("POST /api/game — winner & persistence", () => {
     await POST(makeRequest(validBody({ status: "playing" })))
     expect(mockPrisma.score.createMany).not.toHaveBeenCalled()
   })
+
+  it("gives the save transaction an explicit timeout (remote DB round trips)", async () => {
+    await POST(makeRequest(validBody()))
+    // Supabase round trips made a save take 4.6-9s, which intermittently exceeded
+    // Prisma's 5s default and failed the save with P2028.
+    const options = mockPrisma.$transaction.mock.calls[0]![1] as { timeout?: number; maxWait?: number } | undefined
+    expect(options?.timeout).toBeGreaterThanOrEqual(10_000)
+    expect(options?.maxWait).toBeGreaterThan(0)
+  })
+
+  it("ignores a wordId sent by an older client (the column no longer exists)", async () => {
+    await POST(
+      makeRequest(
+        validBody({
+          questions: [
+            { wordId: "cet4-0", type: "en2cn", options: ["a", "b", "c", "d"], answer1: "a", correct1: true, time1: 1000 },
+          ],
+          // 1 question => the API caps both scores at 200
+          score1: 150,
+          score2: 100,
+        })
+      )
+    )
+    const questions = mockPrisma.game.create.mock.calls[0]![0].data.questions as {
+      create: Array<Record<string, unknown>>
+    }
+    expect(questions.create).toHaveLength(1)
+    // Unknown keys are stripped, so a cached client sending wordId still saves fine
+    expect(questions.create[0]).not.toHaveProperty("wordId")
+    expect(questions.create[0].type).toBe("en2cn")
+  })
 })
 
 describe("POST /api/game — idempotency", () => {
   it("returns the existing game when clientId was already saved", async () => {
-    const existing = { id: "game-existing", clientId: "33333333-3333-4333-8333-333333333333" }
+    const existing = {
+      id: "game-existing",
+      clientId: "33333333-3333-4333-8333-333333333333",
+      player1Id: USER_ID,
+    }
     mockPrisma.game.findUnique.mockResolvedValue(existing as never)
 
     const res = await POST(
@@ -175,6 +209,21 @@ describe("POST /api/game — idempotency", () => {
     const body = await res.json()
     expect(body.game.id).toBe("game-existing")
     expect(body.duplicate).toBe(true)
+    expect(mockPrisma.game.create).not.toHaveBeenCalled()
+  })
+
+  it("refuses to hand back a clientId owned by another account", async () => {
+    mockPrisma.game.findUnique.mockResolvedValue({
+      id: "someone-elses-game",
+      clientId: "44444444-4444-4444-8444-444444444444",
+      player1Id: OPPONENT_ID,
+    } as never)
+
+    const res = await POST(
+      makeRequest(validBody({ clientId: "44444444-4444-4444-8444-444444444444" }))
+    )
+
+    expect(res.status).toBe(409)
     expect(mockPrisma.game.create).not.toHaveBeenCalled()
   })
 })

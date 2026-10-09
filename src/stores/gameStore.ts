@@ -3,9 +3,71 @@ import type { GameState, GameMode, WordLevel, Question } from "@/types"
 import { generateQuestions } from "@/lib/questions"
 import type { WordItem } from "@/types"
 
+type AnswerMap = GameState["answers1"]
+
+const QUESTION_TIME_LIMIT_MS = 15_000
+
+/**
+ * Canonical per-question score. Every player must derive scores from this
+ * formula locally — a remote "final score" is never trusted.
+ * base 100 + time bonus (up to 50) + combo bonus (10 * (combo - 1), capped 50)
+ */
+export function scoreForAnswer(isCorrect: boolean, timeMs: number, comboAfter: number): number {
+  if (!isCorrect) return 0
+  const baseScore = 100
+  const timeBonus = Math.min(
+    50,
+    Math.max(0, Math.floor((QUESTION_TIME_LIMIT_MS - Math.max(0, timeMs)) / 100))
+  )
+  const comboBonus = comboAfter >= 2 ? Math.min(50, (comboAfter - 1) * 10) : 0
+  return baseScore + timeBonus + comboBonus
+}
+
+/**
+ * Recompute a player's total from their answer map, walking the questions in
+ * order so combos match what that player's own client calculated.
+ */
+export function recomputeFromAnswers(
+  questions: Question[],
+  answers: AnswerMap
+): { score: number; maxCombo: number } {
+  let score = 0
+  let combo = 0
+  let maxCombo = 0
+
+  for (const question of questions) {
+    const answer = answers[question.id]
+    if (!answer) continue
+    combo = answer.correct ? combo + 1 : 0
+    maxCombo = Math.max(maxCombo, combo)
+    score += scoreForAnswer(answer.correct, answer.time, combo)
+  }
+
+  return { score, maxCombo }
+}
+
 interface GameStore extends GameState {
   // Actions
   initGame: (mode: GameMode, wordLevel: WordLevel, words: WordItem[], totalQ?: number, presetQuestions?: Question[]) => void
+  /** Re-enter an in-progress realtime match after a page reload. */
+  restoreGame: (snapshot: {
+    mode: GameMode
+    wordLevel: WordLevel
+    questions: Question[]
+    currentIndex: number
+    score1: number
+    score2: number
+    combo1: number
+    combo2: number
+    maxCombo1: number
+    maxCombo2: number
+    lastScoreGained1: number
+    lastScoreGained2: number
+    answers1: AnswerMap
+    answers2: AnswerMap
+    startTime: number
+    questionStartTime: number
+  }) => void
   submitAnswer: (player: 1 | 2, answer: string, timeMs: number) => boolean
   syncOpponentAnswer: (data: {
     questionId: string
@@ -14,8 +76,8 @@ interface GameStore extends GameState {
     timeMs: number
   }) => void
   syncOpponentFinished: (data: {
-    finalScore?: number
-    maxCombo?: number
+    // Only the answer map is accepted: the peer's self-reported totals are
+    // attacker-controllable and are ignored on purpose (see implementation).
     answers?: Record<string, { answer: string; correct: boolean; time: number }>
   }) => void
   nextQuestion: () => void
@@ -68,6 +130,15 @@ export const useGameStore = create<GameStore>((set, get) => ({
     })
   },
 
+  restoreGame: (snapshot) => {
+    // Questions come from the shared match payload, so a reloaded client plays
+    // the exact same set as its opponent.
+    set({
+      ...snapshot,
+      status: "playing",
+    })
+  },
+
   submitAnswer: (player, answer, timeMs) => {
     const state = get()
     const question = state.questions[state.currentIndex]
@@ -83,11 +154,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const currentMaxCombo = player === 1 ? state.maxCombo1 : state.maxCombo2
     const nextMaxCombo = Math.max(currentMaxCombo, nextCombo)
 
-    // Scoring: Base 100 + Time bonus (up to 50) + Combo bonus (10 * (nextCombo - 1) if combo >= 2)
-    const baseScore = isCorrect ? 100 : 0
-    const timeBonus = isCorrect ? Math.min(50, Math.max(0, Math.floor((15000 - timeMs) / 100))) : 0
-    const comboBonus = isCorrect && nextCombo >= 2 ? Math.min(50, (nextCombo - 1) * 10) : 0
-    const totalScore = baseScore + timeBonus + comboBonus
+    const totalScore = scoreForAnswer(isCorrect, timeMs, nextCombo)
 
     const scoreKey = player === 1 ? "score1" : "score2"
     const comboKey = player === 1 ? "combo1" : "combo2"
@@ -117,10 +184,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     // Recompute with the same formula as submitAnswer instead of trusting the
     // opponent's claimed cumulative total (which is attacker-controllable).
     const nextCombo = isCorrect ? state.combo2 + 1 : 0
-    const baseScore = isCorrect ? 100 : 0
-    const timeBonus = isCorrect ? Math.min(50, Math.max(0, Math.floor((15000 - Math.max(0, timeMs)) / 100))) : 0
-    const comboBonus = isCorrect && nextCombo >= 2 ? Math.min(50, (nextCombo - 1) * 10) : 0
-    const gained = baseScore + timeBonus + comboBonus
+    const gained = scoreForAnswer(isCorrect, timeMs, nextCombo)
 
     set({
       score2: state.score2 + gained,
@@ -134,12 +198,35 @@ export const useGameStore = create<GameStore>((set, get) => ({
     })
   },
 
-  syncOpponentFinished: ({ finalScore, maxCombo, answers }) => {
+  syncOpponentFinished: ({ answers }) => {
     const state = get()
+
+    // Sanitize: only keep answers for questions this game actually has, and
+    // only if the shape is what we expect. A peer must not be able to inject
+    // arbitrary ids or non-numeric values into our own answer map / save.
+    const knownQuestionIds = new Set(state.questions.map((q) => q.id))
+    const sanitized: AnswerMap = {}
+    for (const [questionId, raw] of Object.entries(answers ?? {})) {
+      if (!knownQuestionIds.has(questionId)) continue
+      if (!raw || typeof raw.correct !== "boolean") continue
+      const time = Number(raw.time)
+      sanitized[questionId] = {
+        answer: typeof raw.answer === "string" ? raw.answer : "",
+        correct: raw.correct,
+        time: Number.isFinite(time) && time >= 0 ? time : 0,
+      }
+    }
+
+    // The peer's claimed finalScore/maxCombo are deliberately discarded:
+    // recomputing from the answer map keeps a forged total from inflating the
+    // opponent (and from pushing our own save payload past the API's score cap).
+    const merged = { ...state.answers2, ...sanitized }
+    const { score, maxCombo } = recomputeFromAnswers(state.questions, merged)
+
     set({
-      ...(finalScore !== undefined ? { score2: finalScore } : {}),
-      ...(maxCombo !== undefined ? { maxCombo2: Math.max(state.maxCombo2, maxCombo) } : {}),
-      ...(answers ? { answers2: { ...state.answers2, ...answers } } : {}),
+      answers2: merged,
+      score2: score,
+      maxCombo2: Math.max(state.maxCombo2, maxCombo),
     })
   },
 

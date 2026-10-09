@@ -16,6 +16,12 @@ import type { RealtimeChannel } from "@supabase/supabase-js"
 import { generateQuestions } from "@/lib/questions"
 import { useWords } from "@/hooks/useWords"
 import { sound } from "@/lib/sound"
+import { PLAY_TOPIC, resolveGameLevel } from "@/lib/realtime-protocol"
+import {
+  clearRealtimeSession,
+  loadRealtimeSession,
+  saveRealtimeSession,
+} from "@/lib/realtime-session"
 import type { GameMode, WordLevel, GameResult as GameResultType } from "@/types"
 
 export default function GamePage() {
@@ -54,8 +60,11 @@ export default function GamePage() {
   const opponentCorrectCountRef = useRef(0)
   const [opponentCorrectCount, setOpponentCorrectCount] = useState(0)
   const opponentUsernameRef = useRef<string>("")
+  const selfUsernameRef = useRef<string>("")
+  const presenceGraceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [opponentUsername, setOpponentUsername] = useState<string>("")
   const [isWaitingForOpponent, setIsWaitingForOpponent] = useState(false)
+  const [opponentLeft, setOpponentLeft] = useState(false)
   const opponentFinishedRef = useRef(false)
   const selfFinishedRef = useRef(false)
 
@@ -139,6 +148,12 @@ export default function GamePage() {
     const opponentId = new URLSearchParams(window.location.search).get("opponentId")
     if (opponentId) opponentIdRef.current = opponentId
   }, [])
+
+  // Long-lived effects (channel subscription, pagehide) read the username from a
+  // ref so they never have to re-run when it changes
+  useEffect(() => {
+    selfUsernameRef.current = user?.username || ""
+  }, [user?.username])
 
   useEffect(() => {
     return () => clearAllGameTimers()
@@ -237,6 +252,11 @@ export default function GamePage() {
     // Save game to server only if logged in
     if (!user) return
 
+    // In realtime both clients reach this point, so both used to POST the same
+    // match (duplicate history entries + doubled career stats). Only the host
+    // writes the record, and its payload already carries both scores.
+    if (finalMode === "realtime" && !isHostRef.current) return
+
     fetch("/api/game", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -251,7 +271,6 @@ export default function GamePage() {
         // Idempotency key — a retried save won't create a duplicate game
         clientId: crypto.randomUUID(),
         questions: finalQuestions.map((q) => ({
-          wordId: q.word.id,
           type: q.type,
           options: q.options,
           answer1: finalAnswers1[q.id]?.answer,
@@ -279,10 +298,14 @@ export default function GamePage() {
     advanceTimerRef.current = setTimeout(() => {
       advanceTimerRef.current = null
       const state = useGameStore.getState()
+      // Read the mode from the store, not the closure: this callback is also
+      // resumed right after a reload restores a match (when the captured render
+      // still had mode === "ai").
+      const liveMode = state.mode
       if (state.currentIndex < state.questions.length - 1) {
         nextQuestion()
         setTimerKey((k) => k + 1)
-      } else if (mode === "realtime") {
+      } else if (liveMode === "realtime") {
         selfFinishedRef.current = true
         if (channelRef.current && user) {
           channelRef.current.send({
@@ -309,7 +332,13 @@ export default function GamePage() {
         handleGameEnd()
       }
     }, delay)
-  }, [mode, nextQuestion, finishGame, handleGameEnd, user])
+  }, [nextQuestion, finishGame, handleGameEnd, user])
+
+  // Kept in a ref so the mount-only restore effect always calls the newest one
+  const advanceGameRef = useRef(advanceGame)
+  useEffect(() => {
+    advanceGameRef.current = advanceGame
+  }, [advanceGame])
 
   const handleTimeout = useCallback(() => {
     if (answeredRef.current) return
@@ -342,6 +371,128 @@ export default function GamePage() {
     advanceGame(1000)
   }, [mode, submitAnswer, getAIAnswer, advanceGame, user])
 
+  // A page reload wipes the in-memory store, which used to strand the player on
+  // the mode picker while the opponent kept waiting. Read the resume point after
+  // mount (never during render: server and client markup must match) and put the
+  // match back together.
+  const [booting, setBooting] = useState(true)
+
+  /* eslint-disable react-hooks/set-state-in-effect -- one-shot boot probe: the
+     resume point can only be read after mount, and the resulting state must be
+     applied in the same pass for the match to come back in one frame */
+  useEffect(() => {
+    const roomId = new URLSearchParams(window.location.search).get("roomId")
+    if (!roomId) {
+      setBooting(false)
+      return
+    }
+
+    const snapshot = loadRealtimeSession(roomId)
+    const store = useGameStore.getState()
+    // A live navigation already initialised the match — the snapshot is stale
+    if (!snapshot || store.status !== "waiting" || store.questions.length > 0) {
+      if (snapshot) clearRealtimeSession(roomId)
+      setBooting(false)
+      return
+    }
+
+    isHostRef.current = snapshot.isHost
+    opponentIdRef.current = snapshot.opponentId
+    if (snapshot.opponentUsername) {
+      opponentUsernameRef.current = snapshot.opponentUsername
+      setOpponentUsername(snapshot.opponentUsername)
+    }
+    opponentAnswersRef.current = snapshot.answers2
+    const opponentCorrect = Object.values(snapshot.answers2).filter((a) => a.correct).length
+    opponentCorrectCountRef.current = opponentCorrect
+    setOpponentCorrectCount(opponentCorrect)
+    opponentFinishedRef.current = false
+
+    // A reload can land inside the short post-answer pause, before the finish was
+    // broadcast — recover that from the answers instead of trusting the flag
+    const answeredAll = snapshot.questions.every((q) => !!snapshot.answers1[q.id])
+    const resumedFinished = snapshot.selfFinished || answeredAll
+    selfFinishedRef.current = resumedFinished
+
+    useGameStore.getState().restoreGame({
+      mode: "realtime",
+      wordLevel: snapshot.wordLevel,
+      questions: snapshot.questions,
+      currentIndex: snapshot.currentIndex,
+      score1: snapshot.score1,
+      score2: snapshot.score2,
+      combo1: snapshot.combo1,
+      combo2: snapshot.combo2,
+      maxCombo1: snapshot.maxCombo1,
+      maxCombo2: snapshot.maxCombo2,
+      lastScoreGained1: snapshot.lastScoreGained1,
+      lastScoreGained2: snapshot.lastScoreGained2,
+      answers1: snapshot.answers1,
+      answers2: snapshot.answers2,
+      // The per-question clock starts over: we were offline for an unknown while
+      startTime: Date.now(),
+      questionStartTime: Date.now(),
+    })
+
+    if (resumedFinished) {
+      setIsWaitingForOpponent(true)
+    } else if (snapshot.answers1[snapshot.questions[snapshot.currentIndex].id]) {
+      answeredRef.current = true
+      advanceGameRef.current(1200)
+    }
+
+    setTimerKey((k) => k + 1)
+    setBooting(false)
+  }, [])
+  /* eslint-enable react-hooks/set-state-in-effect */
+
+  // Keep a resume point while the match is being played; drop it as soon as the
+  // match is over (a finished match is not resumable).
+  useEffect(() => {
+    if (mode !== "realtime") return
+    // Read the room id from the URL rather than from roomIdRef: this effect is
+    // declared before the channel effect that fills that ref
+    const roomId = new URLSearchParams(window.location.search).get("roomId")
+    if (!roomId) return
+
+    const persist = (state: ReturnType<typeof useGameStore.getState>) => {
+      if (state.mode !== "realtime" || state.status !== "playing") {
+        clearRealtimeSession(roomId)
+        return
+      }
+      saveRealtimeSession({
+        roomId,
+        savedAt: Date.now(),
+        isHost: isHostRef.current,
+        wordLevel: state.wordLevel,
+        questions: state.questions,
+        currentIndex: state.currentIndex,
+        score1: state.score1,
+        score2: state.score2,
+        combo1: state.combo1,
+        combo2: state.combo2,
+        maxCombo1: state.maxCombo1,
+        maxCombo2: state.maxCombo2,
+        lastScoreGained1: state.lastScoreGained1,
+        lastScoreGained2: state.lastScoreGained2,
+        answers1: state.answers1,
+        answers2: state.answers2,
+        opponentId: opponentIdRef.current,
+        opponentUsername: opponentUsernameRef.current,
+        selfFinished: selfFinishedRef.current,
+      })
+    }
+
+    persist(useGameStore.getState())
+    const unsubscribe = useGameStore.subscribe(persist)
+    return () => {
+      unsubscribe()
+      // Unmounting the match page (menu / leave) invalidates the resume point.
+      // A real page unload does not run cleanup, so reloads still resume.
+      clearRealtimeSession(roomId)
+    }
+  }, [mode])
+
   const resetAllRematchState = useCallback(() => {
     rematchRequestedRef.current = false
     opponentRematchRef.current = false
@@ -351,6 +502,7 @@ export default function GamePage() {
     opponentCorrectCountRef.current = 0
     setOpponentCorrectCount(0)
     setIsWaitingForOpponent(false)
+    setOpponentLeft(false)
     opponentFinishedRef.current = false
     selfFinishedRef.current = false
   }, [])
@@ -371,7 +523,7 @@ export default function GamePage() {
         channelRef.current.send({
           type: "broadcast",
           event: "game-started",
-          payload: { questions: presetQuestions, totalQuestions },
+          payload: { questions: presetQuestions, totalQuestions, wordLevel: selectedLevelRef.current },
         })
       }
 
@@ -394,6 +546,53 @@ export default function GamePage() {
   useEffect(() => {
     handleGameEndRef.current = handleGameEnd
   }, [handleGameEnd])
+
+  // The opponent is gone (closed the tab, navigated away, lost the socket).
+  // Broadcasts alone cannot notice a dropped peer, so this is driven by presence
+  // leave + the player-left broadcast. It aborts the match instead of leaving
+  // the player stuck on an overlay that never resolves.
+  const handleOpponentGone = useCallback(
+    (name?: string) => {
+      const state = useGameStore.getState()
+      if (state.mode !== "realtime") return
+
+      // Never keep waiting for a rematch with a player who left
+      rematchRequestedRef.current = false
+      opponentRematchRef.current = false
+      setIsWaitingForRematch(false)
+      setOpponentWantsRematch(false)
+
+      // A finished match already shows its result screen — nothing to abort
+      if (state.status !== "playing") return
+
+      clearAllGameTimers()
+      setIsWaitingForOpponent(false)
+      setOpponentLeft(true)
+      if (name) setOpponentUsername(name)
+    },
+    [clearAllGameTimers]
+  )
+
+  const handleOpponentGoneRef = useRef(handleOpponentGone)
+  useEffect(() => {
+    handleOpponentGoneRef.current = handleOpponentGone
+  }, [handleOpponentGone])
+
+  const leaveRealtimeGame = useCallback(() => {
+    if (channelRef.current && user) {
+      channelRef.current.send({
+        type: "broadcast",
+        event: "player-left",
+        payload: { playerId: user.id, username: user.username },
+      })
+    }
+    if (roomIdRef.current) clearRealtimeSession(roomIdRef.current)
+    clearAllGameTimers()
+    resetAllRematchState()
+    resetGame()
+    setResult(null)
+    window.location.href = "/lobby"
+  }, [user, clearAllGameTimers, resetAllRematchState, resetGame])
 
   // Subscribe to realtime channel for multiplayer answer sync
   useEffect(() => {
@@ -420,18 +619,23 @@ export default function GamePage() {
 
     roomIdRef.current = roomId
     isHostRef.current = isHostParam === "true"
-    const channelName = `room:${roomId}`
-    console.log("[Realtime] Creating channel:", channelName, "isHost:", isHostRef.current)
+    // Gameplay gets its own topic: sharing `room:{id}` with the lobby would make
+    // the lobby's presence leave (fired during the hand-off to the game page)
+    // look like the opponent dropping out.
+    const channelName = PLAY_TOPIC(roomId)
+    const currentUserId = user?.id
+    console.log("[Realtime] Creating channel:", channelName, "isHost:", isHostRef.current, "user:", currentUserId)
 
     // Configure channel to receive own broadcast events
     const channel = supabase.channel(channelName, {
       config: {
         broadcast: { self: true },
+        // Presence needs an opt-in (config flag or a binding registered before
+        // subscribe); we rely on it to notice a peer whose tab died.
+        presence: { enabled: true, key: currentUserId || "anonymous" },
       },
     })
 
-    // Store current user ID for comparison
-    const currentUserId = user?.id
     console.log("[Realtime] Current user ID:", currentUserId)
 
     channel
@@ -482,8 +686,6 @@ export default function GamePage() {
           }
 
           syncOpponentFinished({
-            finalScore: payload.finalScore,
-            maxCombo: payload.maxCombo,
             answers: payload.answers,
           })
 
@@ -523,24 +725,85 @@ export default function GamePage() {
         console.log("[Realtime] Received game-started (rematch), isHost:", isHostRef.current)
         // Joiner receives new questions from host during rematch
         if (!isHostRef.current && payload.questions) {
-          const { questions: presetQuestions, totalQuestions: total } = payload
+          const { questions: presetQuestions, totalQuestions: total, wordLevel: level } = payload
           resetAllRematchState()
           resetGame()
           setResult(null)
           setTimerKey((k) => k + 1)
-          initGame("realtime", selectedLevelRef.current, wordsRef.current, total, presetQuestions)
+          initGame("realtime", resolveGameLevel(level, selectedLevelRef.current), wordsRef.current, total, presetQuestions)
         }
       })
       .on("broadcast", { event: "player-left" }, ({ payload }) => {
         console.log("[Realtime] Received player-left from playerId:", payload.playerId, "currentUserId:", currentUserId)
         if (payload.playerId !== currentUserId) {
-          // Opponent left — cancel rematch waiting
-          if (rematchRequestedRef.current) {
-            rematchRequestedRef.current = false
-            opponentRematchRef.current = false
-            setIsWaitingForRematch(false)
-            setOpponentWantsRematch(false)
+          // Opponent left: cancels a pending rematch and aborts an in-flight match
+          handleOpponentGoneRef.current(payload.username)
+        }
+      })
+      // Presence callbacks must be registered before subscribe(). A leave here is
+      // the only signal we get when the opponent's tab dies without a broadcast.
+      .on("presence", { event: "leave" }, ({ key, leftPresences }) => {
+        if (!currentUserId || key === currentUserId) return
+        const left = leftPresences?.[0]
+        console.log("[Realtime] Opponent presence left:", left?.username ?? key)
+        // A dropped socket re-joins and re-tracks automatically, so only treat
+        // this as a real departure if the opponent is still gone after a moment.
+        // The window is generous on purpose: a page reload closes the socket too,
+        // and the reloaded tab must be able to come back before we abort.
+        if (presenceGraceTimerRef.current) clearTimeout(presenceGraceTimerRef.current)
+        presenceGraceTimerRef.current = setTimeout(() => {
+          presenceGraceTimerRef.current = null
+          if (channel.presenceState()[key]?.length) return
+          handleOpponentGoneRef.current(left?.username)
+        }, 10_000)
+      })
+      // The opponent came back (reload/reconnect) — resume instead of leaving them
+      // staring at a "match aborted" overlay
+      .on("presence", { event: "join" }, ({ key }) => {
+        if (!currentUserId || key === currentUserId) return
+        if (presenceGraceTimerRef.current) {
+          clearTimeout(presenceGraceTimerRef.current)
+          presenceGraceTimerRef.current = null
+        }
+        console.log("[Realtime] Opponent presence (re)joined", key)
+        setOpponentLeft(false)
+      })
+      // A client that (re)joined asks for the current peer state so a reload does
+      // not lose answers that were broadcast while it was away
+      .on("broadcast", { event: "request-game-state" }, ({ payload }) => {
+        if (!currentUserId || payload?.playerId === currentUserId) return
+        const state = useGameStore.getState()
+        if (state.mode !== "realtime") return
+        channel.send({
+          type: "broadcast",
+          event: "game-state",
+          payload: {
+            playerId: currentUserId,
+            username: selfUsernameRef.current,
+            answers: state.answers1,
+            finished: selfFinishedRef.current,
+          },
+        })
+      })
+      .on("broadcast", { event: "game-state" }, ({ payload }) => {
+        if (!currentUserId || payload?.playerId === currentUserId) return
+        if (useGameStore.getState().mode !== "realtime") return
+        console.log("[Realtime] Received game-state, finished:", payload.finished)
+        if (payload.username && !opponentUsernameRef.current) {
+          opponentUsernameRef.current = payload.username
+          setOpponentUsername(payload.username)
+        }
+        // Only the answer map is used; the score is recomputed locally
+        syncOpponentFinished({ answers: payload.answers })
+        if (payload.finished) {
+          opponentFinishedRef.current = true
+          if (selfFinishedRef.current) {
+            setIsWaitingForOpponent(false)
+            finishGame()
+            handleGameEndRef.current()
           }
+        } else if (selfFinishedRef.current) {
+          setIsWaitingForOpponent(true)
         }
       })
       .subscribe((status, err) => {
@@ -548,11 +811,46 @@ export default function GamePage() {
         if (err) {
           console.error("[Realtime] Subscription error:", err)
         }
+        // Track after subscribing so the opponent can detect us leaving. This also
+        // re-runs on automatic rejoins, restoring presence after a network blip.
+        if (status === "SUBSCRIBED" && currentUserId) {
+          channel
+            .track({ id: currentUserId, username: selfUsernameRef.current })
+            .catch((trackErr) => console.warn("[Realtime] Presence track failed:", trackErr))
+
+          // Catch up on anything broadcast while we were away (reload/reconnect)
+          channel.send({
+            type: "broadcast",
+            event: "request-game-state",
+            payload: { playerId: currentUserId },
+          })
+
+          // If we had already finished before the reload, make sure the opponent
+          // knows it — otherwise they wait for a finish that never arrives
+          if (selfFinishedRef.current) {
+            const state = useGameStore.getState()
+            channel.send({
+              type: "broadcast",
+              event: "player-finished",
+              payload: {
+                playerId: currentUserId,
+                username: selfUsernameRef.current,
+                finalScore: state.score1,
+                maxCombo: state.maxCombo1,
+                answers: state.answers1,
+              },
+            })
+          }
+        }
       })
 
     channelRef.current = channel
 
     return () => {
+      if (presenceGraceTimerRef.current) {
+        clearTimeout(presenceGraceTimerRef.current)
+        presenceGraceTimerRef.current = null
+      }
       if (supabase && channel) {
         supabase.removeChannel(channel)
       }
@@ -567,7 +865,7 @@ export default function GamePage() {
   const hasAnswered = currentQuestion ? !!answers1[currentQuestion.id] : false
 
   useEffect(() => {
-    if (status !== "playing" || hasAnswered) return
+    if (status !== "playing" || hasAnswered || opponentLeft) return
 
     timeoutRef.current = false
     answeredRef.current = false
@@ -586,7 +884,7 @@ export default function GamePage() {
     }, 1000)
 
     return () => clearInterval(interval)
-  }, [currentIndex, status, timerKey, hasAnswered])
+  }, [currentIndex, status, timerKey, hasAnswered, opponentLeft])
 
   // Handle timeout separately to avoid setState during render
   useEffect(() => {
@@ -726,6 +1024,17 @@ export default function GamePage() {
     // AI mode: start directly
     setResult(null)
     startGame()
+  }
+
+  // Hydration-safe boot gate: the resume point is read after mount, so the first
+  // paint must not depend on it (server and client markup have to match)
+  if (booting) {
+    return (
+      <div className="max-w-3xl mx-auto px-4 py-24 flex flex-col items-center gap-3">
+        <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+        <p className="text-sm text-muted">加载中...</p>
+      </div>
+    )
   }
 
   // Mode selection screen
@@ -883,6 +1192,7 @@ export default function GamePage() {
                 payload: { playerId: user.id },
               })
             }
+            if (roomIdRef.current) clearRealtimeSession(roomIdRef.current)
             clearAllGameTimers()
             resetAllRematchState()
             resetGame()
@@ -903,14 +1213,43 @@ export default function GamePage() {
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-8">
+      {/* Opponent left mid-match — abort instead of hanging forever */}
+      {opponentLeft && (
+        <div className="fixed inset-0 bg-ink/60 backdrop-blur-xs flex items-center justify-center z-50 animate-countdown-pop">
+          <Card className="max-w-sm mx-4">
+            <CardContent className="p-8 text-center space-y-3">
+              <div className="text-4xl">🚪</div>
+              <h3 className="font-display text-lg font-medium text-ink">对手已离开对局</h3>
+              <p className="text-muted text-sm">
+                {opponentUsername || "对手"} 已断开连接，本局不计入战绩。
+              </p>
+              <Button variant="primary" size="lg" className="w-full" onClick={leaveRealtimeGame}>
+                返回对战大厅
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
       {/* Waiting for opponent overlay */}
-      {isWaitingForOpponent && (
+      {isWaitingForOpponent && !opponentLeft && (
         <div className="fixed inset-0 bg-ink/50 backdrop-blur-xs flex items-center justify-center z-50 animate-countdown-pop">
           <Card className="max-w-sm mx-4">
             <CardContent className="p-8 text-center">
               <div className="animate-spin w-12 h-12 border-4 border-primary border-t-transparent rounded-full mx-auto mb-4" />
               <h3 className="font-display text-lg font-medium text-ink mb-2">等待对手完成</h3>
               <p className="text-muted text-sm">你已完成所有题目，正在等待对手最后一击...</p>
+              <p className="text-xs text-muted-soft mt-3">
+                {opponentUsername || "对手"} 可能已离线，可继续等待或退出本局
+              </p>
+              <Button
+                variant="outline"
+                size="md"
+                className="w-full mt-4"
+                onClick={leaveRealtimeGame}
+              >
+                退出本局
+              </Button>
             </CardContent>
           </Card>
         </div>
@@ -943,7 +1282,7 @@ export default function GamePage() {
             questionNumber={currentIndex + 1}
             totalQuestions={questions.length}
             onAnswer={handleAnswer}
-            disabled={status !== "playing"}
+            disabled={status !== "playing" || opponentLeft}
           />
         </CardContent>
       </Card>

@@ -176,6 +176,81 @@ describe("gameStore", () => {
     expect(Object.keys(state.answers2)).toEqual(["q-1"])
   })
 
+  it("recomputes the opponent total instead of trusting a forged final score", () => {
+    useGameStore.getState().initGame("realtime", "CET4", mockWords, 2, [mockQuestion1, mockQuestion2])
+
+    // A peer controls everything it puts on the wire, so the runtime payload can
+    // carry a bogus cumulative total even though the type does not mention it.
+    // (Passed via a variable on purpose: no excess-property check, like a socket.)
+    const wirePayload = {
+      answers: { "q-1": { answer: "苹果", correct: true, time: 4000 } },
+      finalScore: 999_999,
+      maxCombo: 42,
+    }
+    useGameStore.getState().syncOpponentFinished(wirePayload)
+
+    const state = useGameStore.getState()
+    // base 100 + time bonus 50 — never the claimed 999_999
+    expect(state.score2).toBe(150)
+    expect(state.maxCombo2).toBe(1)
+  })
+
+  it("sanitizes opponent answers received in the finished payload", () => {
+    useGameStore.getState().initGame("realtime", "CET4", mockWords, 2, [mockQuestion1, mockQuestion2])
+
+    useGameStore.getState().syncOpponentFinished({
+      answers: {
+        "q-1": { answer: "苹果", correct: true, time: 5000 },
+        // Unknown question id must be dropped
+        "q-unknown": { answer: "x", correct: true, time: 0 },
+        // Wrong shape must be dropped
+        "q-2": { answer: "香蕉", correct: "yes", time: 1000 },
+      },
+    } as unknown as {
+      answers?: Record<string, { answer: string; correct: boolean; time: number }>
+    })
+
+    const state = useGameStore.getState()
+    expect(Object.keys(state.answers2)).toEqual(["q-1"])
+    expect(state.score2).toBe(150)
+  })
+
+  it("keeps incremental and final opponent scoring consistent", () => {
+    useGameStore.getState().initGame("realtime", "CET4", mockWords, 2, [mockQuestion1, mockQuestion2])
+
+    // Live broadcasts: q-1 then q-2, both correct -> combo 1 then 2
+    useGameStore.getState().syncOpponentAnswer({
+      questionId: "q-1",
+      answer: "苹果",
+      isCorrect: true,
+      timeMs: 10000,
+    })
+    useGameStore.getState().nextQuestion()
+    useGameStore.getState().syncOpponentAnswer({
+      questionId: "q-2",
+      answer: "香蕉",
+      isCorrect: true,
+      timeMs: 10000,
+    })
+    const incremental = useGameStore.getState()
+    expect(incremental.score2).toBe(310) // 150 + (100 + 50 + 10 combo)
+    expect(incremental.maxCombo2).toBe(2)
+
+    // The same two answers delivered as the final payload must add up identically
+    useGameStore.getState().resetGame()
+    useGameStore.getState().initGame("realtime", "CET4", mockWords, 2, [mockQuestion1, mockQuestion2])
+    useGameStore.getState().syncOpponentFinished({
+      answers: {
+        "q-1": { answer: "苹果", correct: true, time: 10000 },
+        "q-2": { answer: "香蕉", correct: true, time: 10000 },
+      },
+    })
+
+    const replayed = useGameStore.getState()
+    expect(replayed.score2).toBe(310)
+    expect(replayed.maxCombo2).toBe(2)
+  })
+
   it("transitions question, finish, and reset states properly", () => {
     useGameStore.getState().initGame("ai", "CET4", mockWords, 2, [mockQuestion1, mockQuestion2])
 

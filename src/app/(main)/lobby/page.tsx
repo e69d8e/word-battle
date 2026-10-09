@@ -14,6 +14,16 @@ import type { RealtimeChannel } from "@supabase/supabase-js"
 import { generateQuestions } from "@/lib/questions"
 import { useWords } from "@/hooks/useWords"
 import { sound } from "@/lib/sound"
+import {
+  ROOM_TOPIC,
+  decideJoinRequest,
+  dropPlayerFromRoom,
+  mergeReadyFlags,
+  parsePlayerLeftPayload,
+  resolveGameLevel,
+  shouldHandleRoomFull,
+} from "@/lib/realtime-protocol"
+import { isRoomLevel, isValidRoomCode, normalizeRoomCode } from "@/lib/rooms"
 import type { WordLevel, Question } from "@/types"
 
 interface Player {
@@ -37,6 +47,13 @@ function LobbyContent() {
 
   const channelRef = useRef<RealtimeChannel | null>(null)
   const joinTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Join handshake state: we keep re-asking the host until it acknowledges us
+  const joinRetryRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const awaitingRoomStateRef = useRef(false)
+  const presenceGraceTimersRef = useRef<ReturnType<typeof setTimeout>[]>([])
+  // Set when the host starts the match: presence leaves after this point are just
+  // the hand-off from the lobby channel to the game channel
+  const gameStartingRef = useRef(false)
 
   const playerId = user?.id || ""
   const playerIdRef = useRef<string>(playerId)
@@ -52,6 +69,9 @@ function LobbyContent() {
   const [copyToast, setCopyToast] = useState<string | null>(null)
 
   const [selectedLevel, setSelectedLevel] = useState<WordLevel>("CET4")
+  // Level actually reserved for the room we are in (the host decides it)
+  const [roomLevel, setRoomLevel] = useState<WordLevel | null>(null)
+  const roomLevelRef = useRef<WordLevel | null>(null)
   const { words } = useWords(selectedLevel)
   const wordsRef = useRef<typeof words>([])
 
@@ -63,13 +83,6 @@ function LobbyContent() {
   useEffect(() => {
     playerIdRef.current = playerId
   }, [playerId])
-
-  // Persist selectedLevel to localStorage
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      localStorage.setItem("lobbyLevel", selectedLevel)
-    }
-  }, [selectedLevel])
 
   // Redirect to login if not authenticated
   const [showLoginDialog, setShowLoginDialog] = useState(false)
@@ -85,6 +98,9 @@ function LobbyContent() {
   useEffect(() => {
     return () => {
       if (joinTimeoutRef.current) clearTimeout(joinTimeoutRef.current)
+      if (joinRetryRef.current) clearInterval(joinRetryRef.current)
+      presenceGraceTimersRef.current.forEach(clearTimeout)
+      presenceGraceTimersRef.current = []
       const supabase = getSupabase()
       if (channelRef.current && supabase) {
         supabase.removeChannel(channelRef.current)
@@ -102,15 +118,26 @@ function LobbyContent() {
     }
   }
 
+  const stopJoinAttempt = useCallback(() => {
+    awaitingRoomStateRef.current = false
+    if (joinRetryRef.current) {
+      clearInterval(joinRetryRef.current)
+      joinRetryRef.current = null
+    }
+  }, [])
+
   const subscribeToRoom = useCallback((rid: string) => {
     const supabase = getSupabase()
     if (!supabase) {
       throw new Error("Supabase client not initialized")
     }
 
-    const channel = supabase.channel(`room:${rid}`, {
+    const channel = supabase.channel(ROOM_TOPIC(rid), {
       config: {
-        presence: { key: playerIdRef.current },
+        // Presence needs an opt-in: the client only joins a topic with presence
+        // enabled when config.presence.enabled is true *or* a presence binding was
+        // registered before subscribe(). We do both (see the leave handler below).
+        presence: { enabled: true, key: playerIdRef.current },
         broadcast: { self: true },
       },
     })
@@ -126,7 +153,11 @@ function LobbyContent() {
           clearTimeout(joinTimeoutRef.current)
           joinTimeoutRef.current = null
         }
-        updateRoom(payload.room)
+        // Stop re-asking once the host has actually put us in the room
+        if (payload.room?.players?.some((p: Player) => p.id === playerIdRef.current)) {
+          stopJoinAttempt()
+        }
+        updateRoom(mergeReadyFlags(roomRef.current, payload.room))
       })
       .on("broadcast", { event: "game-start" }, ({ payload }) => {
         updateRoom(payload.room)
@@ -136,48 +167,61 @@ function LobbyContent() {
         // Host is always room.players[0] — ignore the echo of our own broadcast
         const currentRoom = roomRef.current
         if (currentRoom?.players[0]?.id === playerIdRef.current) return
+        // Match is starting: a presence leave now is the host closing its lobby
+        // channel to hand over to the game channel, not an opponent dropping out
+        gameStartingRef.current = true
+        stopJoinAttempt()
         const opponent = currentRoom?.players.find((p) => p.id !== playerIdRef.current)
         sound.playGameStart()
-        initGame("realtime", selectedLevel, wordsRef.current, payload.totalQuestions, payload.questions)
+        // Play (and save) the level the host actually picked, not our own
+        const level = resolveGameLevel(payload.wordLevel, roomLevelRef.current ?? selectedLevel)
+        initGame("realtime", level, wordsRef.current, payload.totalQuestions, payload.questions)
         const opponentParams = opponent
           ? `&opponent=${encodeURIComponent(opponent.username)}&opponentId=${encodeURIComponent(opponent.id)}`
           : ""
-        router.push(`/game?roomId=${rid}${opponentParams}`)
+        router.push(`/game?roomId=${rid}&wordLevel=${level}${opponentParams}`)
       })
       .on("broadcast", { event: "player-left" }, ({ payload }) => {
-        updateRoom(payload.room)
-        setError(`${payload.username || "对手"} 已离开房间`)
+        const { room: nextRoom, username } = parsePlayerLeftPayload(payload, roomRef.current)
+        if (nextRoom) updateRoom(nextRoom)
+        setError(`${username || "对手"} 已离开房间`)
       })
       .on("broadcast", { event: "request-state" }, ({ payload }) => {
-        const currentRoom = roomRef.current
-        if (!currentRoom) return
-        const playerExists = currentRoom.players.some((p) => p.id === payload.playerId)
-        if (!playerExists && currentRoom.players.length >= 2) {
+        const decision = decideJoinRequest({
+          room: roomRef.current,
+          myPlayerId: playerIdRef.current,
+          requesterId: payload.playerId,
+          requesterName: payload.username,
+        })
+        if (decision.action === "ignore") return
+        if (decision.action === "full") {
           // Room is full — tell the joiner instead of silently adding a 3rd player
           channel.send({
             type: "broadcast",
             event: "room-full",
-            payload: { roomId: currentRoom.id },
+            payload: { roomId: decision.room.id, senderId: playerIdRef.current },
           })
           return
         }
-        const updatedRoom = playerExists
-          ? currentRoom
-          : {
-              ...currentRoom,
-              players: [
-                ...currentRoom.players,
-                { id: payload.playerId, username: payload.username, ready: false },
-              ],
-            }
-        updateRoom(updatedRoom)
+        updateRoom(decision.room)
         channel.send({
           type: "broadcast",
           event: "room-update",
-          payload: { room: updatedRoom },
+          payload: { room: decision.room },
         })
       })
-      .on("broadcast", { event: "room-full" }, () => {
+      .on("broadcast", { event: "room-full" }, ({ payload }) => {
+        // `broadcast: { self: true }` echoes our own messages back: without this
+        // guard the host (and the other member in the room) would kick
+        // themselves out of their own room whenever a third player tried to join.
+        if (!shouldHandleRoomFull({
+          payloadSenderId: payload?.senderId,
+          myPlayerId: playerIdRef.current,
+          awaitingRoomState: awaitingRoomStateRef.current,
+        })) {
+          return
+        }
+        stopJoinAttempt()
         if (joinTimeoutRef.current) {
           clearTimeout(joinTimeoutRef.current)
           joinTimeoutRef.current = null
@@ -192,18 +236,63 @@ function LobbyContent() {
         setRoom(null)
         setRoomId("")
       })
+      // Presence leave is the only signal we get when a peer's tab dies while we
+      // are waiting. presence callbacks must be registered before subscribe().
+      .on("presence", { event: "leave" }, ({ key, leftPresences }) => {
+        if (gameStartingRef.current) return
+        if (key === playerIdRef.current) return
+        const left = (leftPresences?.[0] ?? null) as { id?: string; username?: string } | null
+        const leftId = left?.id ?? key
+        // A transient socket drop auto-rejoins: only drop the player if presence
+        // is still empty after a short grace period.
+        const timer = setTimeout(() => {
+          if (gameStartingRef.current) return
+          if (channel.presenceState()[leftId]?.length) return
+          // Only drop the player if presence is still empty after the grace period
+          const nextRoom = dropPlayerFromRoom(roomRef.current, leftId)
+          if (!nextRoom) return
+          updateRoom(nextRoom)
+          setError(`${left?.username || "对手"} 已离开房间`)
+        }, 3000)
+        presenceGraceTimersRef.current.push(timer)
+      })
       .subscribe()
 
     channelRef.current = channel
     return channel
-  }, [initGame, router, selectedLevel])
+  }, [initGame, router, selectedLevel, stopJoinAttempt])
 
   const handleCreateRoom = useCallback(async () => {
     if (!user) return
     setStatus("creating")
     sound.playClick()
+    setError("")
 
-    const newRoomId = Math.random().toString(36).substring(2, 8).toUpperCase()
+    // The code is allocated by the server (unique index) so two hosts can never
+    // end up in the same channel by accident
+    let newRoomId: string
+    try {
+      const res = await fetch("/api/rooms", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ level: selectedLevel }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data?.room?.code) {
+        setError(data?.error || "房间创建失败，请稍后重试")
+        setStatus("idle")
+        return
+      }
+      newRoomId = data.room.code as string
+    } catch {
+      setError("网络异常，房间创建失败")
+      setStatus("idle")
+      return
+    }
+
+    roomLevelRef.current = selectedLevel
+    setRoomLevel(selectedLevel)
+
     const newRoom: RoomState = {
       id: newRoomId,
       players: [{ id: playerIdRef.current, username: user.username, ready: false }],
@@ -214,6 +303,7 @@ function LobbyContent() {
     roomRef.current = newRoom
     setRoom(newRoom)
     setStatus("waiting")
+    gameStartingRef.current = false
 
     const channel = subscribeToRoom(newRoomId)
 
@@ -238,15 +328,48 @@ function LobbyContent() {
       event: "room-update",
       payload: { room: newRoom },
     })
-  }, [user, subscribeToRoom])
+  }, [user, subscribeToRoom, selectedLevel])
 
   const handleJoinRoom = useCallback(async () => {
     if (!user || !joinRoomId) return
     setStatus("joining")
     sound.playClick()
+    setError("")
 
-    const rid = joinRoomId.toUpperCase().trim()
+    const rid = normalizeRoomCode(joinRoomId)
+    if (!isValidRoomCode(rid)) {
+      setError("房间号格式不正确，请检查后重试")
+      setStatus("idle")
+      return
+    }
+
+    // Reserve the seat server-side before touching realtime, so a full/expired/
+    // unknown room is refused instead of half-joined
+    try {
+      const res = await fetch("/api/rooms/join", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: rid }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setError(data?.error || "加入房间失败，请稍后重试")
+        setStatus("idle")
+        return
+      }
+      if (isRoomLevel(data?.room?.level)) {
+        roomLevelRef.current = data.room.level
+        setRoomLevel(data.room.level)
+      }
+    } catch {
+      setError("网络异常，加入房间失败")
+      setStatus("idle")
+      return
+    }
+
     setRoomId(rid)
+    gameStartingRef.current = false
+    awaitingRoomStateRef.current = true
 
     const channel = subscribeToRoom(rid)
 
@@ -266,17 +389,41 @@ function LobbyContent() {
       ready: false,
     })
 
-    await channel.send({
-      type: "broadcast",
-      event: "request-state",
-      payload: { playerId: playerIdRef.current, username: user.username },
-    })
+    const requestState = () =>
+      channel.send({
+        type: "broadcast",
+        event: "request-state",
+        payload: { playerId: playerIdRef.current, username: user.username },
+      })
+
+    await requestState()
+
+    // Re-ask while we wait: one lost broadcast used to leave the host holding a
+    // phantom player (or the joiner timing out against a perfectly healthy room)
+    joinRetryRef.current = setInterval(() => {
+      if (!awaitingRoomStateRef.current) {
+        if (joinRetryRef.current) {
+          clearInterval(joinRetryRef.current)
+          joinRetryRef.current = null
+        }
+        return
+      }
+      if (channel.state !== "joined") return
+      requestState()
+    }, 1500)
 
     setStatus("waiting")
     setError("")
 
     joinTimeoutRef.current = setTimeout(() => {
       joinTimeoutRef.current = null
+      stopJoinAttempt()
+      // Tell the host in case it already added us before the reply was lost
+      channel.send({
+        type: "broadcast",
+        event: "player-left",
+        payload: { playerId: playerIdRef.current, username: user.username },
+      })
       setError("房间不存在或对手已离线，请检查房间号")
       setStatus("idle")
       if (channelRef.current) {
@@ -287,7 +434,18 @@ function LobbyContent() {
       setRoom(null)
       setRoomId("")
     }, 5000)
-  }, [user, joinRoomId, subscribeToRoom])
+  }, [user, joinRoomId, subscribeToRoom, stopJoinAttempt])
+
+  // Fire-and-forget: the reservation is a convenience, the realtime channel is
+  // what actually plays the match
+  const releaseRoomReservation = useCallback((code: string) => {
+    if (!code) return
+    fetch("/api/rooms/leave", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code }),
+    }).catch(() => {})
+  }, [])
 
   const handleReady = useCallback(async () => {
     if (!channelRef.current || !roomId || !user || !room) return
@@ -317,12 +475,24 @@ function LobbyContent() {
     if (room.players[0]?.id !== playerIdRef.current) return
     if (room.players.length < 2 || words.length < 10) return
 
+    // From here on the lobby channel is being handed over to the game channel,
+    // so a presence leave is not an opponent dropping out
+    gameStartingRef.current = true
+    stopJoinAttempt()
+
+    // Extend the reservation for the duration of the match
+    fetch("/api/rooms/start", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code: roomId }),
+    }).catch(() => {})
+
     const questions = generateQuestions(words, 10)
 
     await channelRef.current.send({
       type: "broadcast",
       event: "game-started",
-      payload: { questions, totalQuestions: questions.length },
+      payload: { questions, totalQuestions: questions.length, wordLevel: selectedLevel },
     })
 
     sound.playGameStart()
@@ -332,27 +502,31 @@ function LobbyContent() {
       : ""
     initGame("realtime", selectedLevel, words, questions.length, questions)
     router.push(`/game?roomId=${roomId}&isHost=true${opponentParams}`)
-  }, [roomId, room, words, initGame, router, selectedLevel])
+  }, [roomId, room, words, initGame, router, selectedLevel, stopJoinAttempt])
 
   const handleLeaveRoom = useCallback(() => {
     const channel = channelRef.current
     const supabase = getSupabase()
     // Tell the other player before tearing down so they don't wait forever
     if (channel && roomRef.current) {
-      const remainingRoom: RoomState = {
-        ...roomRef.current,
-        players: roomRef.current.players.filter((p) => p.id !== playerIdRef.current),
-      }
+      const remainingRoom = dropPlayerFromRoom(roomRef.current, playerIdRef.current)
       channel.send({
         type: "broadcast",
         event: "player-left",
-        payload: { room: remainingRoom, username: user?.username },
+        payload: { room: remainingRoom, username: user?.username, playerId: playerIdRef.current },
       })
     }
     if (joinTimeoutRef.current) {
       clearTimeout(joinTimeoutRef.current)
       joinTimeoutRef.current = null
     }
+    stopJoinAttempt()
+    presenceGraceTimersRef.current.forEach(clearTimeout)
+    presenceGraceTimersRef.current = []
+    gameStartingRef.current = false
+    roomLevelRef.current = null
+    setRoomLevel(null)
+    if (roomId) releaseRoomReservation(roomId)
     if (channel && supabase) {
       supabase.removeChannel(channel)
     }
@@ -360,6 +534,39 @@ function LobbyContent() {
     setRoom(null)
     setRoomId("")
     setStatus("idle")
+  }, [user, stopJoinAttempt, roomId, releaseRoomReservation])
+
+  // Best-effort "I am leaving" signal for tab close / reload / back, so the other
+  // player is not left waiting on a room that no longer exists. Presence covers
+  // the cases where this message never makes it out.
+  useEffect(() => {
+    const onPageHide = () => {
+      const channel = channelRef.current
+      const currentRoom = roomRef.current
+      if (!channel || !currentRoom) return
+      channel.send({
+        type: "broadcast",
+        event: "player-left",
+        payload: {
+          room: dropPlayerFromRoom(currentRoom, playerIdRef.current),
+          username: user?.username,
+          playerId: playerIdRef.current,
+        },
+      })
+      // sendBeacon survives the page teardown (a normal fetch may not), so the
+      // seat is not left occupied until the TTL expires
+      try {
+        navigator.sendBeacon?.(
+          "/api/rooms/leave",
+          new Blob([JSON.stringify({ code: currentRoom.id })], { type: "application/json" })
+        )
+      } catch {
+        // best effort only
+      }
+    }
+
+    window.addEventListener("pagehide", onPageHide)
+    return () => window.removeEventListener("pagehide", onPageHide)
   }, [user])
 
   const isCurrentUserReady = room?.players.find((p) => p.id === playerId)?.ready ?? false
@@ -558,7 +765,7 @@ function LobbyContent() {
             <div className="space-y-3">
               <h3 className="font-semibold text-sm text-ink flex items-center justify-between">
                 <span>对战玩家 ({room.players.length}/2)</span>
-                <span className="text-xs text-muted font-normal">词库：{selectedLevel}</span>
+                <span className="text-xs text-muted font-normal">词库：{roomLevel ?? selectedLevel}</span>
               </h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 {room.players.map((player) => {
@@ -619,10 +826,11 @@ function LobbyContent() {
                 <Button
                   variant="primary"
                   size="lg"
-                  className="flex-1 bg-success hover:bg-success/90 animate-combo-pulse shadow-md"
+                  className="flex-1 bg-success hover:bg-success/90 animate-cta-glow shadow-md"
                   onClick={handleStartGame}
+                  disabled={words.length < 10}
                 >
-                  🚀 双方已就绪 · 开战！
+                  {words.length < 10 ? "⏳ 词库加载中..." : "🚀 双方已就绪 · 开战！"}
                 </Button>
               )}
 

@@ -142,8 +142,26 @@ body {
   }
 }
 
+/* Decorative pulse for badges/hints. It scales the element, so never put it on a
+   button: a moving box is both harder to hit for users and untargetable for
+   automation (Playwright refuses to click elements whose box keeps changing). */
 .animate-combo-pulse {
   animation: combo-pulse 0.8s ease-in-out infinite;
+}
+
+/* Attention pulse for *interactive* elements. Animates the glow only, so the box
+   stays exactly where it is while still drawing the eye. */
+@keyframes cta-glow {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(93, 184, 114, 0.55); /* --color-success */
+  }
+  50% {
+    box-shadow: 0 0 0 7px rgba(93, 184, 114, 0);
+  }
+}
+
+.animate-cta-glow {
+  animation: cta-glow 1.5s ease-out infinite;
 }
 
 @keyframes shake {
