@@ -20,7 +20,9 @@
     "db:seed": "npx tsx prisma/seed.ts",
     "test": "vitest run",
     "test:watch": "vitest",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate",
+    "smoke:realtime": "node scripts/realtime-smoke.mjs",
+    "db:restore": "node scripts/db-restore.mjs"
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",

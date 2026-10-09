@@ -13,6 +13,20 @@ CREATE TABLE "User" (
 );
 
 -- CreateTable
+CREATE TABLE "Room" (
+    "id" TEXT NOT NULL,
+    "code" TEXT NOT NULL,
+    "status" TEXT NOT NULL DEFAULT 'waiting',
+    "level" TEXT NOT NULL DEFAULT 'CET4',
+    "hostId" TEXT NOT NULL,
+    "guestId" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "expiresAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "Room_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
 CREATE TABLE "WordList" (
     "id" TEXT NOT NULL,
     "name" TEXT NOT NULL,
@@ -37,6 +51,7 @@ CREATE TABLE "Word" (
 -- CreateTable
 CREATE TABLE "Game" (
     "id" TEXT NOT NULL,
+    "clientId" TEXT,
     "mode" TEXT NOT NULL,
     "status" TEXT NOT NULL DEFAULT 'waiting',
     "wordLevel" TEXT NOT NULL,
@@ -85,7 +100,19 @@ CREATE TABLE "Score" (
 CREATE UNIQUE INDEX "User_username_key" ON "User"("username");
 
 -- CreateIndex
+CREATE UNIQUE INDEX "Room_code_key" ON "Room"("code");
+
+-- CreateIndex
+CREATE INDEX "Room_expiresAt_idx" ON "Room"("expiresAt");
+
+-- CreateIndex
+CREATE INDEX "Room_hostId_idx" ON "Room"("hostId");
+
+-- CreateIndex
 CREATE INDEX "Word_wordListId_idx" ON "Word"("wordListId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "Game_clientId_key" ON "Game"("clientId");
 
 -- CreateIndex
 CREATE INDEX "Game_player1Id_idx" ON "Game"("player1Id");
@@ -104,6 +131,12 @@ CREATE INDEX "Score_mode_level_score_idx" ON "Score"("mode", "level", "score" DE
 
 -- CreateIndex
 CREATE INDEX "Score_userId_mode_level_idx" ON "Score"("userId", "mode", "level");
+
+-- AddForeignKey
+ALTER TABLE "Room" ADD CONSTRAINT "Room_hostId_fkey" FOREIGN KEY ("hostId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Room" ADD CONSTRAINT "Room_guestId_fkey" FOREIGN KEY ("guestId") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "Word" ADD CONSTRAINT "Word_wordListId_fkey" FOREIGN KEY ("wordListId") REFERENCES "WordList"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -126,3 +159,30 @@ ALTER TABLE "GameQuestion" ADD CONSTRAINT "GameQuestion_wordId_fkey" FOREIGN KEY
 -- AddForeignKey
 ALTER TABLE "Score" ADD CONSTRAINT "Score_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
+
+-- ---------------------------------------------------------------------------
+-- Table hardening (not modelled by Prisma, so it is appended by hand).
+--
+-- Supabase grants the PostgREST roles (anon/authenticated) full DML on every
+-- table created in "public" via default privileges, and the anon key is shipped
+-- to the browser (NEXT_PUBLIC_SUPABASE_ANON_KEY). Without policies that made
+-- Game/Score/Word/... readable *and writable* by anyone holding that key —
+-- which also bypassed the API's score validation.
+--
+-- The app only reaches these tables through Prisma as "postgres" (BYPASSRLS) and
+-- uses the anon key exclusively for Realtime, so enabling RLS with no policies
+-- plus revoking the grants removes the front door without affecting the app.
+-- ---------------------------------------------------------------------------
+ALTER TABLE "User" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "Room" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "WordList" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "Word" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "Game" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "GameQuestion" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "Score" ENABLE ROW LEVEL SECURITY;
+
+REVOKE ALL ON ALL TABLES IN SCHEMA "public" FROM anon, authenticated;
+
+-- Keep future tables closed as well
+ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA "public"
+  REVOKE ALL ON TABLES FROM anon, authenticated;

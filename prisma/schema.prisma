@@ -9,15 +9,39 @@ datasource db {
 }
 
 model User {
+  id          String   @id @default(uuid())
+  username    String   @unique
+  password    String
+  avatar      String?
+  createdAt   DateTime @default(now())
+  games1      Game[]   @relation("Player1")
+  games2      Game[]   @relation("Player2")
+  winners     Game[]   @relation("Winner")
+  scores      Score[]
+  roomsHosted Room[]   @relation("RoomHost")
+  roomsJoined Room[]   @relation("RoomGuest")
+}
+
+/// Multiplayer lobby reservation.
+///
+/// Broadcast channels alone let two hosts generate the same short code, and let
+/// anyone who guesses a code walk into a live room. The code is therefore handed
+/// out (and the second seat claimed) by the server before the realtime handshake
+/// starts; `expiresAt` recycles rooms whose owner never came back.
+model Room {
   id        String   @id @default(uuid())
-  username  String   @unique
-  password  String
-  avatar    String?
+  code      String   @unique
+  status    String   @default("waiting")
+  level     String   @default("CET4")
+  hostId    String
+  guestId   String?
   createdAt DateTime @default(now())
-  games1    Game[]   @relation("Player1")
-  games2    Game[]   @relation("Player2")
-  winners   Game[]   @relation("Winner")
-  scores    Score[]
+  expiresAt DateTime
+  host      User     @relation("RoomHost", fields: [hostId], references: [id], onDelete: Cascade)
+  guest     User?    @relation("RoomGuest", fields: [guestId], references: [id], onDelete: SetNull)
+
+  @@index([expiresAt])
+  @@index([hostId])
 }
 
 model WordList {
@@ -28,15 +52,14 @@ model WordList {
 }
 
 model Word {
-  id            String         @id @default(uuid())
-  word          String
-  phonetic      String?
-  meaning       String
-  meaningCn     String
-  example       String?
-  wordListId    String
-  gameQuestions GameQuestion[]
-  wordList      WordList       @relation(fields: [wordListId], references: [id])
+  id         String   @id @default(uuid())
+  word       String
+  phonetic   String?
+  meaning    String
+  meaningCn  String
+  example    String?
+  wordListId String
+  wordList   WordList @relation(fields: [wordListId], references: [id])
 
   @@index([wordListId])
 }
@@ -65,10 +88,16 @@ model Game {
   @@index([createdAt(sort: Desc)])
 }
 
+/// One question of a saved match.
+///
+/// There is deliberately no link to the `Word` table: the game plays words served
+/// by `/api/words` straight from the bundled JSON (`id` like `cet4-137`), which
+/// never touches the database. A `wordId` foreign key could therefore never be
+/// populated with a valid value — keeping the column around only invited saves to
+/// fail on a constraint violation.
 model GameQuestion {
   id       String  @id @default(uuid())
   gameId   String
-  wordId   String?
   type     String
   options  String
   answer1  String?
@@ -78,7 +107,6 @@ model GameQuestion {
   time1    Int?
   time2    Int?
   game     Game    @relation(fields: [gameId], references: [id], onDelete: Cascade)
-  word     Word?   @relation(fields: [wordId], references: [id])
 
   @@index([gameId])
 }

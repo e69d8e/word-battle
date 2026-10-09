@@ -58,3 +58,6 @@ prisma/dev.db
 
 # Playwright CLI test artifacts
 /.playwright-cli/
+
+# local database dumps (contain password hashes)
+db-backup/
